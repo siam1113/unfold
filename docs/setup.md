@@ -125,7 +125,7 @@ The same SQLite database must not be written by a host process and a container a
 | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
 | `/api` returns `auth0_not_configured`  | Add all required Auth0 values, ensure `AUTH0_SECRET` has at least 32 characters, and restart the server.                          |
 | Auth0 callback fails                   | Match `APP_BASE_URL` exactly and add its `/auth/callback` URL to Auth0's Allowed Callback URLs.                                   |
-| Host/origin rejected                   | Use one of the configured local app origins, or update `APP_BASE_URL` for the environment you are running.                        |
+| Host/origin rejected                   | Use `APP_BASE_URL` for the canonical origin; for additional domains, configure `APP_ALLOWED_ORIGINS` and `APP_ALLOWED_HOSTS`.       |
 | Chromium executable missing            | Run `npx playwright install chromium`; in a container use the provided Dockerfile which installs the browser and OS dependencies. |
 | Target page fails from Docker          | Use `host.docker.internal` for a host-run app; confirm the target and its APIs are in `allowedOrigins`.                           |
 | Assistant reports model not configured | Set `OPENAI_API_KEY` in the server environment and restart.                                                                       |

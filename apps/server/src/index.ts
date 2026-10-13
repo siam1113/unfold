@@ -29,17 +29,44 @@ const appOrigin =
   (process.env.RENDER_EXTERNAL_HOSTNAME
     ? `https://${process.env.RENDER_EXTERNAL_HOSTNAME}`
     : `http://127.0.0.1:${port}`);
+const configuredOrigins = (process.env.APP_ALLOWED_ORIGINS || "")
+  .split(",")
+  .map((value) => value.trim())
+  .filter(Boolean)
+  .flatMap((value) => {
+    try {
+      const origin = new URL(value).origin;
+      return origin === value.replace(/\/$/, "") ? [origin] : [];
+    } catch {
+      return [];
+    }
+  });
 const allowedOrigins = new Set([
   appOrigin,
+  ...configuredOrigins,
   `http://127.0.0.1:${port}`,
   "http://127.0.0.1:5173",
   "http://localhost:5173",
   `http://localhost:${port}`,
 ]);
-const allowedHosts = new Set(
-  [...allowedOrigins].map((origin) => {
+const configuredHosts = (process.env.APP_ALLOWED_HOSTS || "")
+  .split(",")
+  .map((value) => value.trim())
+  .filter(Boolean)
+  .flatMap((value) => {
     try {
-      return new URL(origin).host;
+      const host = value.includes("://") ? new URL(value).host : value;
+      return /^[a-z0-9.-]+(?::\d{1,5})?$/i.test(host) ? [host.toLowerCase()] : [];
+    } catch {
+      return [];
+    }
+  });
+const allowedHosts = new Set(
+  [...allowedOrigins, ...configuredHosts].map((origin) => {
+    try {
+      return origin.includes("://")
+        ? new URL(origin).host.toLowerCase()
+        : origin.toLowerCase();
     } catch {
       return "";
     }
@@ -48,9 +75,9 @@ const allowedHosts = new Set(
 app.disable("x-powered-by");
 app.use((req, res, next) => {
   const origin = req.get("origin");
-  const host = req.get("host") || "";
+  const host = (req.get("host") || "").toLowerCase();
   if (!allowedHosts.has(host)) {
-    res.status(403).json({ error: "Local host required" });
+    res.status(403).json({ error: "Host not allowed" });
     return;
   }
   if (origin && !allowedOrigins.has(origin)) {

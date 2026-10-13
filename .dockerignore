@@ -1,0 +1,13 @@
+node_modules
+.local
+artifacts
+dist
+.git
+.cache
+coverage
+playwright-report
+test-results
+docs/screenshots
+*.log
+.env
+.env.*

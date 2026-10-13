@@ -1,0 +1,18 @@
+services:
+  unfold:
+    container_name: unfold-app
+    build: .
+    init: true
+    shm_size: 1gb
+    env_file:
+      - path: .env
+        required: false
+      - path: .env.local
+        required: false
+    ports:
+      - "127.0.0.1:4310:4310"
+      - "127.0.0.1:4174:4174"
+    volumes:
+      - ./.local:/app/.local
+      - ./artifacts:/app/artifacts
+      - ./docs:/app/docs

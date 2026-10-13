@@ -1,0 +1,59 @@
+{
+  "name": "unfold",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run build:engine && concurrently -k -n api,ui,fixture -c blue,magenta,cyan \"node --env-file-if-exists=.env --env-file-if-exists=.env.local dist/engine/apps/server/src/index.js\" \"npm run dashboard\" \"node dist/engine/apps/fixture/server.js\"",
+    "server": "npm run build:engine --silent && node --env-file-if-exists=.env --env-file-if-exists=.env.local dist/engine/apps/server/src/index.js",
+    "dashboard": "vite --config apps/dashboard/vite.config.ts",
+    "fixture": "npm run build:engine --silent && node dist/engine/apps/fixture/server.js",
+    "appscan": "npm run build:engine --silent && node dist/engine/apps/cli/src/index.js",
+    "build": "npm run typecheck && npm run build:engine && vite build --config apps/dashboard/vite.config.ts",
+    "start": "NODE_ENV=production node --env-file-if-exists=.env --env-file-if-exists=.env.local dist/engine/apps/server/src/index.js",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "demo": "npm run build:engine --silent && node dist/engine/scripts/demo.js",
+    "benchmark": "npm run build:engine --silent && node dist/engine/scripts/benchmark.js",
+    "check:generated": "npm run build:engine --silent && node dist/engine/scripts/check-generated.js",
+    "test:integration": "npm run build:engine --silent && node dist/engine/scripts/integration-check.js",
+    "test:ui": "node scripts/ui-check.mjs",
+    "build:engine": "tsc -p tsconfig.engine.json",
+    "lint": "prettier --check apps packages scripts tests *.json .github/workflows/ci.yml",
+    "format": "prettier --write apps packages scripts tests *.json .github/workflows/ci.yml",
+    "test:hardening": "npm run build:engine --silent && node dist/engine/scripts/hardening-check.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "commander": "14.0.3",
+    "express": "5.3.0",
+    "fflate": "0.8.3",
+    "lucide-react": "1.55.0",
+    "playwright": "1.64.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "react-router": "7.18.4",
+    "reactflow": "11.11.4",
+    "zod": "4.6.6"
+  },
+  "devDependencies": {
+    "@types/express": "5.0.6",
+    "@types/node": "22.20.5",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "5.2.0",
+    "concurrently": "9.2.4",
+    "prettier": "3.8.1",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3",
+    "vite": "7.3.7",
+    "vitest": "2.1.9"
+  }
+}

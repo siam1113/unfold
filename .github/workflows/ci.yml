@@ -1,0 +1,34 @@
+name: CI
+on: [push, pull_request]
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build
+      - run: npm run lint
+      - run: npm test
+      - run: npm run test:hardening
+      - name: Verify live exploration and recovery
+        run: |
+          node dist/engine/apps/fixture/server.js > /tmp/unfold-fixture.log 2>&1 &
+          fixture_pid=$!
+          trap 'kill "$fixture_pid"' EXIT
+          npm run test:integration
+          npm run demo
+          npm run check:generated
+      - name: Verify the dashboard
+        run: |
+          npm start > /tmp/unfold-server.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid"' EXIT
+          npm run test:ui
+
+      - name: Evaluate fixture quality gates
+        run: BENCHMARK_WORKERS=4 npm run benchmark

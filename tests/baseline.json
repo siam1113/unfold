@@ -1,0 +1,40 @@
+{
+  "routes": ["/", "/projects", "/activity", "/settings", "/help"],
+  "effects": [
+    "navigate_same_tab",
+    "open_modal",
+    "open_drawer",
+    "open_menu",
+    "switch_tab",
+    "expand_region",
+    "change_content",
+    "reveal_form",
+    "open_new_tab",
+    "download"
+  ],
+  "blockedControls": ["Delete project", "Save changes"],
+  "minimumStates": 12,
+  "maxDepth": 2,
+  "expectedStates": [
+    "/|base",
+    "/|menu",
+    "/|dialog",
+    "/|drawer",
+    "/projects|active",
+    "/projects|active,menu",
+    "/projects|archived",
+    "/projects|active,filters",
+    "/activity|base",
+    "/activity|menu",
+    "/activity|earlier",
+    "/settings|base",
+    "/settings|menu",
+    "/settings|appearance",
+    "/settings|notifications",
+    "/help|base",
+    "/help|menu",
+    "/help|projects-help",
+    "/help|activity-help"
+  ],
+  "description": "Independent Atlas fixture UI contract at depth 2 from /; route seeds consume one level. State keys describe visible regions and explicit control selection, not engine fingerprints. Exact expected effects for every executed edge are defined in fixture-oracle.ts."
+}

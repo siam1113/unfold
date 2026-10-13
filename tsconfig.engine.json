@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": "dist/engine",
+    "rootDir": "."
+  },
+  "include": [
+    "apps/cli/**/*.ts",
+    "apps/server/**/*.ts",
+    "apps/fixture/**/*.ts",
+    "packages/**/*.ts",
+    "scripts/**/*.ts"
+  ],
+  "exclude": ["node_modules", "artifacts", "dist"]
+}

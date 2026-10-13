@@ -1,0 +1,40 @@
+node_modules/
+dist/
+build/
+coverage/
+playwright-report/
+test-results/
+screenshots/
+docs/screenshots/
+
+# Local runtime data and generated discovery output.
+.local/
+artifacts/
+*.sqlite
+*.sqlite3
+*.sqlite-*
+*.db
+*.db-*
+*.db-wal
+*.db-shm
+
+# Credentials, local environment overrides, and browser sessions.
+.env
+.env.*
+!/.env.example
+auth-state*.json
+storage-state*.json
+playwright/.auth/
+.auth/
+
+# Local caches and editor/OS files.
+.cache/
+.turbo/
+.DS_Store
+*.log
+*.tmp
+*.swp
+*.pem
+*.key
+*.p12
+*.pfx

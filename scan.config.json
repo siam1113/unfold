@@ -1,0 +1,14 @@
+{
+  "name": "Atlas workspace",
+  "baseUrl": "http://127.0.0.1:4174",
+  "concurrency": 4,
+  "maxDepth": 3,
+  "maxStates": 100,
+  "maxActions": 400,
+  "maxDurationMinutes": 5,
+  "actionTimeoutMs": 5000,
+  "settleMs": 160,
+  "safeMode": true,
+  "captureScreenshots": true,
+  "captureTracesOnFailure": true
+}

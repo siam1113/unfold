@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Atlas workspace</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: #f0f3f8;
+        color: #263b54;
+        font: 15px system-ui;
+      }
+      header {
+        background: white;
+        padding: 22px 40px;
+        border-bottom: 1px solid #d9e1ec;
+        display: flex;
+        align-items: center;
+        gap: 45px;
+      }
+      header strong {
+        font-size: 23px;
+        letter-spacing: -1px;
+      }
+      nav {
+        display: flex;
+        gap: 24px;
+      }
+      a {
+        color: #3866c1;
+        text-decoration: none;
+      }
+      nav a[aria-current] {
+        color: #182b48;
+        font-weight: 650;
+      }
+      main {
+        max-width: 1080px;
+        margin: 52px auto;
+        padding: 0 24px;
+      }
+      h1 {
+        font-size: 36px;
+        letter-spacing: -1.4px;
+      }
+      h2 {
+        font-size: 20px;
+      }
+      p {
+        color: #68768a;
+        line-height: 1.7;
+      }
+      button,
+      input,
+      select {
+        font: inherit;
+        border-radius: 7px;
+        border: 1px solid #c8d2e0;
+        background: white;
+        padding: 10px 16px;
+        color: #263b54;
+        cursor: pointer;
+      }
+      button:hover {
+        background: #e9eff9;
+      }
+      button.primary {
+        background: #3866c1;
+        color: white;
+        border-color: #3866c1;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 18px;
+      }
+      article,
+      section.panel {
+        background: white;
+        border: 1px solid #dce3ed;
+        border-radius: 12px;
+        padding: 24px;
+      }
+      .badge {
+        background: #e7f3ed;
+        color: #327557;
+        padding: 4px 9px;
+        border-radius: 5px;
+        font-size: 12px;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        background: white;
+      }
+      td,
+      th {
+        text-align: left;
+        padding: 17px;
+        border-bottom: 1px solid #e1e7f0;
+      }
+      dialog {
+        border: 1px solid #d0d9e5;
+        border-radius: 16px;
+        padding: 32px;
+        max-width: 460px;
+        box-shadow: 0 24px 90px #19315330;
+      }
+      dialog::backdrop {
+        background: #1d304d55;
+      }
+      [data-drawer] {
+        position: fixed;
+        right: 0;
+        top: 0;
+        height: 100vh;
+        width: 340px;
+        background: white;
+        padding: 32px;
+        box-shadow: -10px 0 50px #23385825;
+        z-index: 2;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      .toolbar {
+        display: flex;
+        gap: 12px;
+        margin: 24px 0;
+      }
+      label {
+        display: block;
+        margin: 20px 0 7px;
+      }
+      input {
+        width: 100%;
+      }
+      [role="tab"][aria-selected="true"] {
+        background: #dce7fb;
+        border-color: #7394cf;
+      }
+      details {
+        background: white;
+        border: 1px solid #dce3ed;
+        padding: 20px;
+        border-radius: 10px;
+        margin: 12px 0;
+      }
+      summary {
+        cursor: pointer;
+      }
+      footer {
+        margin-top: 40px;
+        color: #8492a6;
+        font-size: 12px;
+      }
+      #menu {
+        position: absolute;
+        top: 85px;
+        right: 30px;
+        background: white;
+        padding: 18px;
+        border: 1px solid #ccd6e3;
+        border-radius: 10px;
+      }
+      #menu a {
+        display: block;
+        padding: 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <strong>◈ Atlas</strong>
+      <nav aria-label="Main navigation">
+        <a href="/">Overview</a><a href="/projects">Projects</a
+        ><a href="/activity">Activity</a><a href="/settings">Settings</a
+        ><a href="/help">Help</a>
+      </nav>
+      <button
+        style="margin-left: auto"
+        aria-haspopup="menu"
+        aria-expanded="false"
+        aria-controls="menu"
+        id="menu-toggle"
+      >
+        Workspace menu
+      </button>
+    </header>
+    <div role="menu" id="menu" aria-label="Workspace menu" hidden>
+      <a role="menuitem" href="/settings">Preferences</a
+      ><a role="menuitem" href="/help">Support center</a>
+    </div>
+    <main id="main"></main>
+    <script>
+      const path = location.pathname;
+      document.querySelectorAll("nav a").forEach((a) => {
+        if (a.getAttribute("href") === path)
+          a.setAttribute("aria-current", "page");
+      });
+      const overview = `<h1>Your workspace, at a glance.</h1><p>Plan the next chapter. Find everything your team is working on.</p><div class="toolbar" role="toolbar" aria-label="Overview actions"><button class="primary" id="open-details" aria-haspopup="dialog">Workspace details</button><button id="open-drawer" aria-expanded="false" aria-controls="drawer">View insights</button><a href="/help" target="_blank">Open help in a new tab</a></div><div class="grid"><article aria-label="Website redesign"><span class="badge">In progress</span><h2>Website redesign</h2><p>A fresh experience for our next release.</p><a href="/projects">Explore projects</a></article><article aria-label="Team activity"><span class="badge">Up to date</span><h2>Team activity</h2><p>Follow the latest changes across your workspace.</p><a href="/activity">View activity</a></article><article aria-label="Workspace health"><span class="badge">All systems ready</span><h2>Workspace health</h2><p>Your team has everything it needs to get started.</p><a href="/settings">View settings</a></article></div><dialog id="details" aria-label="Workspace details"><h2>Workspace details</h2><p>Atlas is your team's shared space for projects and ideas.</p><button id="close-details" aria-controls="details">Close details</button></dialog><aside id="drawer" data-drawer aria-label="Workspace insights" hidden><h2>Workspace insights</h2><p>3 active projects<br>12 collaborators<br>8 milestones completed</p><button id="close-drawer" aria-controls="drawer">Close insights</button></aside>`;
+      const projects = `<h1>Projects</h1><p>Good work starts with a clear view.</p><div role="tablist" class="toolbar" aria-label="Project views"><button role="tab" aria-selected="true" aria-controls="projects-panel" id="active-tab">Active projects</button><button role="tab" aria-selected="false" aria-controls="projects-panel" id="archived-tab">Archived projects</button></div><section id="projects-panel" role="tabpanel"><table aria-label="Active projects"><thead><tr><th>Project</th><th>Team</th><th>Status</th></tr></thead><tbody><tr><td>Website redesign</td><td>Design</td><td>In progress</td></tr><tr><td>Mobile experience</td><td>Product</td><td>In review</td></tr><tr><td>Brand guidelines</td><td>Marketing</td><td>Planning</td></tr></tbody></table></section><div class="toolbar"><button id="filter-toggle" aria-expanded="false" aria-controls="filters">Show filters</button><button id="delete">Delete project</button></div><form id="filters" aria-label="Project filters" hidden><label for="search">Project name</label><input id="search" placeholder="Find a project"><button type="submit">Apply filters</button></form>`;
+      const activity = `<h1>Activity</h1><p>Small steps. Meaningful progress.</p><section class="panel" aria-label="Recent activity"><h2>Today</h2><p>Design review completed for Website redesign.</p><p>Mobile experience moved to review.</p><div id="older" hidden><h2>Yesterday</h2><p>Brand guidelines project was opened for planning.</p></div><button id="load-more" aria-expanded="false" aria-controls="older">Show earlier activity</button></section>`;
+      const settings = `<h1>Settings</h1><p>Make this workspace work for you.</p><details><summary>Appearance preferences</summary><p>Use your device settings for the most comfortable view.</p><button role="tab" aria-selected="false" id="dark">Dark preview</button><div id="appearance"></div></details><details><summary>Notification preferences</summary><p>Manage which updates reach your inbox.</p></details><section class="panel"><h2>Workspace profile</h2><form aria-label="Workspace profile"><label for="workspace">Workspace name</label><input id="workspace" value="Atlas"><button type="submit">Save changes</button></form></section>`;
+      const help = `<h1>A little guidance goes a long way.</h1><p>Everything you need to feel at home in Atlas.</p><details><summary>How do projects work?</summary><p>Organize your team's work into projects, then track progress together.</p></details><details><summary>Where can I find activity?</summary><p>Open the Activity page for a timeline of your team's recent work.</p><a href="/activity">Explore activity</a></details><a href="/download" download>Download sample report</a>`;
+      document.getElementById("main").innerHTML =
+        ({
+          "/": overview,
+          "/projects": projects,
+          "/activity": activity,
+          "/settings": settings,
+          "/help": help,
+        }[path] || help) +
+        "<footer>Atlas · Discovery evaluation workspace</footer>";
+      const on = (id, fn) =>
+        document.getElementById(id)?.addEventListener("click", fn);
+      on("menu-toggle", () => {
+        const e = document.getElementById("menu");
+        e.hidden = !e.hidden;
+        document
+          .getElementById("menu-toggle")
+          .setAttribute("aria-expanded", String(!e.hidden));
+      });
+      on("open-details", () => document.getElementById("details").showModal());
+      on("close-details", () => document.getElementById("details").close());
+      for (const id of ["open-drawer", "close-drawer"])
+        on(id, () => {
+          const d = document.getElementById("drawer");
+          d.hidden = !d.hidden;
+          document
+            .getElementById("open-drawer")
+            .setAttribute("aria-expanded", String(!d.hidden));
+        });
+      on("filter-toggle", () => {
+        const f = document.getElementById("filters");
+        f.hidden = !f.hidden;
+        document
+          .getElementById("filter-toggle")
+          .setAttribute("aria-expanded", String(!f.hidden));
+      });
+      on("load-more", () => {
+        document.getElementById("older").hidden = false;
+        document
+          .getElementById("load-more")
+          .setAttribute("aria-expanded", "true");
+      });
+      const active = document.getElementById("projects-panel")?.innerHTML;
+      for (const id of ["active-tab", "archived-tab"])
+        on(id, () => {
+          document
+            .querySelectorAll("[role=tab]")
+            .forEach((t) =>
+              t.setAttribute("aria-selected", String(t.id === id)),
+            );
+          document.getElementById("projects-panel").innerHTML =
+            id === "active-tab"
+              ? active
+              : '<article aria-label="Archived projects"><h2>Archived projects</h2><p>Customer onboarding · Completed last quarter</p></article>';
+        });
+      on("dark", () => {
+        document.getElementById("dark").setAttribute("aria-selected", "true");
+        document.getElementById("appearance").textContent =
+          "Dark appearance selected for preview.";
+      });
+      on("delete", () => fetch("/api/delete", { method: "POST" }));
+      document
+        .querySelectorAll("form")
+        .forEach((f) =>
+          f.addEventListener("submit", (e) => e.preventDefault()),
+        );
+    </script>
+  </body>
+</html>

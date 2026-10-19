@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "Unfold WebMCP Tools",
+  "version": "1.0.0",
+  "description": "Registers your Unfold project's published capabilities as live WebMCP tools (document.modelContext) on sites you choose to grant access to.",
+  "minimum_chrome_version": "111",
+  "action": {
+    "default_popup": "options.html",
+    "default_title": "Unfold WebMCP Tools"
+  },
+  "options_page": "options.html",
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": ["storage", "scripting"],
+  "optional_host_permissions": ["http://*/*", "https://*/*"]
+}

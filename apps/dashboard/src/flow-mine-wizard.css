@@ -1,0 +1,253 @@
+.mine-wizard-backdrop {
+  position: fixed;
+  z-index: 1003;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(15 24 29 / 34%);
+}
+.mine-wizard {
+  width: min(460px, 92vw);
+  max-height: 85vh;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 20px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: 0 18px 54px rgb(15 24 29 / 20%);
+}
+.mine-wizard-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.mine-wizard-head h3 {
+  font-size: 15px;
+  margin: 0;
+}
+.mine-wizard-steps {
+  display: flex;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.mine-wizard-steps span {
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--canvas);
+}
+.mine-wizard-steps span.active {
+  background: #eef4ff;
+  color: #2a5bd7;
+  font-weight: 650;
+}
+.mine-wizard-steps span.done {
+  color: #23805e;
+}
+.mine-wizard-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.mine-wizard-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  cursor: pointer;
+}
+.mine-wizard-option.active {
+  border-color: #2a5bd7;
+  background: #f5f8ff;
+}
+.mine-wizard-option strong {
+  display: block;
+  font-size: 13px;
+}
+.mine-wizard-option small {
+  font-size: 11px;
+  color: var(--muted);
+}
+.mine-wizard-body select {
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  font-size: 12px;
+}
+.mine-wizard-notice {
+  font-size: 11px;
+  color: #a66b08;
+}
+.mine-wizard-log {
+  font-size: 11px;
+  color: var(--muted);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 120px;
+  overflow: auto;
+  background: var(--canvas);
+  border-radius: 7px;
+  padding: 8px 10px;
+}
+.mine-wizard-error {
+  font-size: 12px;
+  color: #bd4e4e;
+}
+.mine-wizard-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+}
+.mine-wizard-running-hint {
+  font-size: 11px;
+  color: var(--muted);
+}
+.mine-wizard-pipeline {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.mine-wizard-pipeline li {
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 9px 11px;
+  background: var(--canvas);
+}
+.mine-wizard-pipeline li.stage-active {
+  border-color: #2a5bd7;
+  background: #f5f8ff;
+}
+.mine-wizard-pipeline li.stage-done {
+  border-color: #cfe8db;
+}
+.mine-wizard-pipeline li.stage-error {
+  border-color: #e9b9b9;
+  background: #fff5f5;
+}
+.mine-wizard-pipeline-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.mine-wizard-pipeline-icon {
+  display: flex;
+  align-items: center;
+  color: var(--muted);
+}
+.mine-wizard-pipeline li.stage-active .mine-wizard-pipeline-icon {
+  color: #2a5bd7;
+}
+.mine-wizard-pipeline li.stage-done .mine-wizard-pipeline-icon {
+  color: #23805e;
+}
+.mine-wizard-pipeline li.stage-error .mine-wizard-pipeline-icon {
+  color: #bd4e4e;
+}
+.mine-wizard-pipeline .mine-wizard-log {
+  margin-top: 7px;
+  max-height: 90px;
+}
+.mine-wizard-found {
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 9px 11px;
+}
+.mine-wizard-found-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 6px;
+}
+.mine-wizard-found ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 160px;
+  overflow: auto;
+}
+.mine-wizard-found li {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+}
+.mine-wizard-found-tags {
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.mine-wizard-finished {
+  font-size: 12px;
+  color: #23805e;
+  font-weight: 600;
+}
+
+/* --- Dark theme overrides (auto-generated contrast fix) --- */
+
+:root[data-theme="dark"] .mine-wizard-steps span.active {
+  color: var(--ink);
+  background: var(--button-hover);
+}
+:root[data-theme="dark"] .mine-wizard-steps span.done {
+  color: #8bd9bb;
+}
+:root[data-theme="dark"] .mine-wizard-option.active {
+  background: var(--surface);
+}
+:root[data-theme="dark"] .mine-wizard-notice {
+  color: #edc679;
+}
+:root[data-theme="dark"] .mine-wizard-error {
+  color: #ffaaa1;
+}
+:root[data-theme="dark"] .mine-wizard-pipeline li.stage-active {
+  background: var(--surface);
+}
+:root[data-theme="dark"] .mine-wizard-pipeline li.stage-done {
+  border-color: var(--line);
+}
+:root[data-theme="dark"] .mine-wizard-pipeline li.stage-error {
+  background: var(--surface);
+  border-color: var(--line);
+}
+:root[data-theme="dark"]
+  .mine-wizard-pipeline
+  li.stage-active
+  .mine-wizard-pipeline-icon {
+  color: var(--ink);
+}
+:root[data-theme="dark"]
+  .mine-wizard-pipeline
+  li.stage-done
+  .mine-wizard-pipeline-icon {
+  color: #8bd9bb;
+}
+:root[data-theme="dark"]
+  .mine-wizard-pipeline
+  li.stage-error
+  .mine-wizard-pipeline-icon {
+  color: #ffaaa1;
+}
+:root[data-theme="dark"] .mine-wizard-finished {
+  color: #8bd9bb;
+}

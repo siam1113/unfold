@@ -146,7 +146,15 @@ export class RobotsPolicy {
     }
   }
   allows(url: string) {
-    return this.policies.get(new URL(url).origin)?.allows(url) ?? false;
+    // load() only fetches robots.txt for the base origin plus configured
+    // allowedOrigins. allowedUrl() (policy.ts) already allows any origin by
+    // default — an app can legitimately load from origins never listed
+    // there. Falling back to false here silently re-blocked exactly those
+    // requests through a second, separate gate, even though the origin
+    // policy itself had already allowed them (e.g. a side nav populated
+    // from a different origin than the app's own, never rendering).
+    const policy = this.policies.get(new URL(url).origin);
+    return policy ? policy.allows(url) : true;
   }
   delay(origin: string) {
     return this.policies.get(origin)?.delayMs || 0;

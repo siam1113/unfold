@@ -93,7 +93,13 @@ try {
   await new Coordinator(store).start(run.id);
   const data = store.data(run.id);
   assert.equal(blockedHits, 0);
-  assert.equal(writes, 0);
+  // Cross-origin navigation and network writes are both allowed by
+  // default now — same-origin restriction and the write blocklist are
+  // opt-in (see the dedicated originGuard/blockedWrite runs below). Robots
+  // and risky-navigation keywords remain the only unconditional blocks.
+  // The fixture's own POST to /write should reach the server here, and
+  // show up as a visible run event + signal rather than vanish silently.
+  assert.equal(writes, 1);
   assert.equal(authMisses, 0);
   assert(data.states.some((s) => s.mainText.includes("Isolated")));
   assert(!data.states.some((s) => s.mainText.includes("CONTEXT LEAK")));
@@ -104,10 +110,48 @@ try {
   );
   assert(
     data.actions.some((a) =>
+      a.signals.some((s) => s.startsWith("network_write")),
+    ),
+  );
+  assert(
+    data.events.some(
+      (e) => e.level === "info" && e.message.includes("Network write: POST"),
+    ),
+  );
+  // Explicitly blocklisting a write (opt-in) still blocks it, and logs the
+  // block as a warn event rather than silently dropping it.
+  writes = 0;
+  const blockedWrite = store.createRun({
+    ...config,
+    networkWriteBlocklist: [{ url: `${baseUrl}/write`, method: "POST" }],
+  });
+  await new Coordinator(store).start(blockedWrite.id);
+  const blockedWriteData = store.data(blockedWrite.id);
+  assert.equal(writes, 0);
+  assert(
+    blockedWriteData.actions.some((a) =>
       a.signals.some((s) => s.startsWith("blocked_write")),
     ),
   );
-  assert(data.actions.some((a) => a.policy.rule === "origin"));
+  assert(
+    blockedWriteData.events.some(
+      (e) => e.level === "warn" && e.message.includes("Blocked: POST"),
+    ),
+  );
+  // Explicitly restricting allowedOrigins (opt-in) still rejects
+  // cross-origin navigation, via the same decide()-time policy check that
+  // skips the task before any network attempt.
+  const restrictedOrigin = store.createRun({
+    ...config,
+    allowedOrigins: [new URL(baseUrl).origin],
+  });
+  await new Coordinator(store).start(restrictedOrigin.id);
+  const restrictedOriginData = store.data(restrictedOrigin.id);
+  assert(
+    restrictedOriginData.actions.some(
+      (a) => a.policy.rule === "origin" && a.decision === "skipped_policy",
+    ),
+  );
   const repeated = data.components.filter((c) => c.familyId);
   assert(repeated.length >= 3);
   assert.equal(new Set(repeated.map((c) => c.familyId)).size, 1);

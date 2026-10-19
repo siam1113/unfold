@@ -203,18 +203,56 @@
           a.setAttribute("aria-current", "page");
       });
       const overview = `<h1>Your workspace, at a glance.</h1><p>Plan the next chapter. Find everything your team is working on.</p><div class="toolbar" role="toolbar" aria-label="Overview actions"><button class="primary" id="open-details" aria-haspopup="dialog">Workspace details</button><button id="open-drawer" aria-expanded="false" aria-controls="drawer">View insights</button><a href="/help" target="_blank">Open help in a new tab</a></div><div class="grid"><article aria-label="Website redesign"><span class="badge">In progress</span><h2>Website redesign</h2><p>A fresh experience for our next release.</p><a href="/projects">Explore projects</a></article><article aria-label="Team activity"><span class="badge">Up to date</span><h2>Team activity</h2><p>Follow the latest changes across your workspace.</p><a href="/activity">View activity</a></article><article aria-label="Workspace health"><span class="badge">All systems ready</span><h2>Workspace health</h2><p>Your team has everything it needs to get started.</p><a href="/settings">View settings</a></article></div><dialog id="details" aria-label="Workspace details"><h2>Workspace details</h2><p>Atlas is your team's shared space for projects and ideas.</p><button id="close-details" aria-controls="details">Close details</button></dialog><aside id="drawer" data-drawer aria-label="Workspace insights" hidden><h2>Workspace insights</h2><p>3 active projects<br>12 collaborators<br>8 milestones completed</p><button id="close-drawer" aria-controls="drawer">Close insights</button></aside>`;
-      const projects = `<h1>Projects</h1><p>Good work starts with a clear view.</p><div role="tablist" class="toolbar" aria-label="Project views"><button role="tab" aria-selected="true" aria-controls="projects-panel" id="active-tab">Active projects</button><button role="tab" aria-selected="false" aria-controls="projects-panel" id="archived-tab">Archived projects</button></div><section id="projects-panel" role="tabpanel"><table aria-label="Active projects"><thead><tr><th>Project</th><th>Team</th><th>Status</th></tr></thead><tbody><tr><td>Website redesign</td><td>Design</td><td>In progress</td></tr><tr><td>Mobile experience</td><td>Product</td><td>In review</td></tr><tr><td>Brand guidelines</td><td>Marketing</td><td>Planning</td></tr></tbody></table></section><div class="toolbar"><button id="filter-toggle" aria-expanded="false" aria-controls="filters">Show filters</button><button id="delete">Delete project</button></div><form id="filters" aria-label="Project filters" hidden><label for="search">Project name</label><input id="search" placeholder="Find a project"><button type="submit">Apply filters</button></form>`;
+      const projectRow = (p) =>
+        `<tr><td>${p.name}</td><td>${p.team}</td><td>${p.status}</td><td><a href="/projects/${p.id}/permissions">Manage permissions</a></td></tr>`;
+      const projects = `<h1>Projects</h1><p>Good work starts with a clear view.</p><div role="tablist" class="toolbar" aria-label="Project views"><button role="tab" aria-selected="true" aria-controls="projects-panel" id="active-tab">Active projects</button><button role="tab" aria-selected="false" aria-controls="projects-panel" id="archived-tab">Archived projects</button></div><section id="projects-panel" role="tabpanel"><table aria-label="Active projects"><thead><tr><th>Project</th><th>Team</th><th>Status</th><th>Permissions</th></tr></thead><tbody id="projects-body">${[
+        {
+          id: "proj-1",
+          name: "Website redesign",
+          team: "Design",
+          status: "In progress",
+        },
+        {
+          id: "proj-2",
+          name: "Mobile experience",
+          team: "Product",
+          status: "In review",
+        },
+        {
+          id: "proj-3",
+          name: "Brand guidelines",
+          team: "Marketing",
+          status: "Planning",
+        },
+      ]
+        .map(projectRow)
+        .join(
+          "",
+        )}</tbody></table></section><div class="toolbar"><button id="filter-toggle" aria-expanded="false" aria-controls="filters">Show filters</button><button id="delete">Delete project</button></div><form id="filters" aria-label="Project filters" hidden><label for="search">Project name</label><input id="search" placeholder="Find a project"><button type="submit">Apply filters</button></form><form id="create-project" aria-label="Create project"><label for="new-project-name">New project name</label><input id="new-project-name" placeholder="Name your project"><button type="submit">Create project</button></form>`;
+      const permissionsPage = (id) =>
+        `<h1>Project permissions</h1><p>Choose who can access this project.</p><form id="permissions-form" aria-label="Project permissions"><label for="role">Access role</label><select id="role"><option value="viewer">Viewer</option><option value="editor">Editor</option><option value="admin">Admin</option></select><button type="submit">Save permissions</button></form><p id="permissions-status" role="status"></p><a href="/projects">Back to projects</a>`;
       const activity = `<h1>Activity</h1><p>Small steps. Meaningful progress.</p><section class="panel" aria-label="Recent activity"><h2>Today</h2><p>Design review completed for Website redesign.</p><p>Mobile experience moved to review.</p><div id="older" hidden><h2>Yesterday</h2><p>Brand guidelines project was opened for planning.</p></div><button id="load-more" aria-expanded="false" aria-controls="older">Show earlier activity</button></section>`;
       const settings = `<h1>Settings</h1><p>Make this workspace work for you.</p><details><summary>Appearance preferences</summary><p>Use your device settings for the most comfortable view.</p><button role="tab" aria-selected="false" id="dark">Dark preview</button><div id="appearance"></div></details><details><summary>Notification preferences</summary><p>Manage which updates reach your inbox.</p></details><section class="panel"><h2>Workspace profile</h2><form aria-label="Workspace profile"><label for="workspace">Workspace name</label><input id="workspace" value="Atlas"><button type="submit">Save changes</button></form></section>`;
       const help = `<h1>A little guidance goes a long way.</h1><p>Everything you need to feel at home in Atlas.</p><details><summary>How do projects work?</summary><p>Organize your team's work into projects, then track progress together.</p></details><details><summary>Where can I find activity?</summary><p>Open the Activity page for a timeline of your team's recent work.</p><a href="/activity">Explore activity</a></details><a href="/download" download>Download sample report</a>`;
+      const login = `<h1>Sign in</h1><p>Use the demo account to view your account page.</p><form id="login-form" aria-label="Sign in"><label for="username">Username</label><input id="username" name="username" autocomplete="username"><label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password"><button type="submit" class="primary">Sign in</button></form><p id="login-status" role="status"></p>`;
+      const account = `<h1>Your account</h1><p id="account-status">Loading…</p>`;
+      const lab = `<h1>Stability lab</h1><p>Exercises the discovery worker's page-stability wait against a loading indicator and a slow network call.</p><button id="lab-report-button">Run report</button><p id="lab-report-result">Idle</p><button id="lab-data-button">Load data</button><p id="lab-data-result">Idle</p>`;
+      const legacyUi = `<h1>Legacy UI</h1><p>Plain, non-semantic clickable controls — no &lt;button&gt;, no role, no tabindex, no cursor:pointer hint either — just a styled &lt;div&gt; with a click handler, the way some older enterprise UI toolkits render controls.</p><div id="legacy-button" style="display:inline-block;padding:8px 16px;border:1px solid #ccc;">Run action</div><p id="legacy-result">Idle</p>`;
+      const permissionsMatch = path.match(/^\/projects\/([^/]+)\/permissions$/);
       document.getElementById("main").innerHTML =
-        ({
-          "/": overview,
-          "/projects": projects,
-          "/activity": activity,
-          "/settings": settings,
-          "/help": help,
-        }[path] || help) +
+        (permissionsMatch
+          ? permissionsPage(permissionsMatch[1])
+          : {
+              "/": overview,
+              "/projects": projects,
+              "/activity": activity,
+              "/settings": settings,
+              "/help": help,
+              "/login": login,
+              "/account": account,
+              "/lab": lab,
+              "/legacy-ui": legacyUi,
+            }[path] || help) +
         "<footer>Atlas · Discovery evaluation workspace</footer>";
       const on = (id, fn) =>
         document.getElementById(id)?.addEventListener("click", fn);
@@ -267,6 +305,108 @@
           "Dark appearance selected for preview.";
       });
       on("delete", () => fetch("/api/delete", { method: "POST" }));
+      document
+        .getElementById("filters")
+        ?.addEventListener("submit", async (e) => {
+          e.preventDefault();
+          const query = document.getElementById("search").value;
+          const res = await fetch(
+            `/api/projects?query=${encodeURIComponent(query)}`,
+          );
+          const rows = await res.json();
+          document.getElementById("projects-body").innerHTML = rows
+            .map(projectRow)
+            .join("");
+        });
+      document
+        .getElementById("create-project")
+        ?.addEventListener("submit", async (e) => {
+          e.preventDefault();
+          const nameInput = document.getElementById("new-project-name");
+          const res = await fetch("/api/projects", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name: nameInput.value }),
+          });
+          const project = await res.json();
+          document
+            .getElementById("projects-body")
+            .insertAdjacentHTML("beforeend", projectRow(project));
+          nameInput.value = "";
+        });
+      if (permissionsMatch) {
+        const projectId = permissionsMatch[1];
+        fetch(`/api/projects/${projectId}/permissions`)
+          .then((res) => res.json())
+          .then((data) => {
+            document.getElementById("role").value = data.role;
+          });
+        document
+          .getElementById("permissions-form")
+          ?.addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const role = document.getElementById("role").value;
+            const res = await fetch(`/api/projects/${projectId}/permissions`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ role }),
+            });
+            const data = await res.json();
+            document.getElementById("permissions-status").textContent =
+              `Saved: ${data.role}`;
+          });
+      }
+      document
+        .getElementById("login-form")
+        ?.addEventListener("submit", async (e) => {
+          e.preventDefault();
+          const res = await fetch("/login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              username: document.getElementById("username").value,
+              password: document.getElementById("password").value,
+            }),
+          });
+          if (res.ok) {
+            location.href = "/account";
+            return;
+          }
+          const data = await res.json().catch(() => ({}));
+          document.getElementById("login-status").textContent =
+            data.error || "Could not sign in.";
+        });
+      if (path === "/account")
+        fetch("/api/account")
+          .then((res) => res.json())
+          .then((data) => {
+            document.getElementById("account-status").textContent =
+              `Signed in as ${data.email} · ${data.plan} plan`;
+          })
+          .catch(() => {
+            document.getElementById("account-status").textContent =
+              "Could not load account.";
+          });
+      on("legacy-button", () => {
+        document.getElementById("legacy-result").textContent = "Action run";
+      });
+      on("lab-report-button", () => {
+        const result = document.getElementById("lab-report-result");
+        result.setAttribute("aria-busy", "true");
+        result.textContent = "Running…";
+        setTimeout(() => {
+          result.removeAttribute("aria-busy");
+          result.textContent = "Report ready";
+        }, 800);
+      });
+      on("lab-data-button", () => {
+        const result = document.getElementById("lab-data-result");
+        fetch("/api/lab-data")
+          .then((res) => res.json())
+          .then((data) => {
+            result.textContent = `Loaded: ${data.items} items`;
+          });
+      });
       document
         .querySelectorAll("form")
         .forEach((f) =>

@@ -1,0 +1,822 @@
+.faw-root,
+/* RunPanel is rendered via createPortal straight onto document.body (see
+   flow-automation-workflow-views.tsx), which moves it out of .faw-root's
+   real DOM subtree — custom properties don't cross that boundary, so
+   without redeclaring them here every var(--faw-*) inside RunPanel
+   silently resolves to nothing (invisible borders/backgrounds). Same fix
+   as flow-automation-framework-views.css's .faw-wizard-overlay. */
+.faw-run-overlay {
+  --faw-good: #23805e;
+  --faw-good-bg: #eef7f2;
+  --faw-bad: #bd4e4e;
+  --faw-bad-bg: #fff0f0;
+  --faw-active: #3a56a0;
+  --faw-active-bg: #eef2fc;
+}
+.faw-root {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  gap: 14px;
+  min-width: 0;
+  min-height: 0;
+  color: var(--ink);
+  font-size: 13px;
+}
+.faw-root * {
+  box-sizing: border-box;
+}
+.faw-root button {
+  font: inherit;
+}
+.faw-muted {
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.faw-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--button-hover);
+  color: var(--ink);
+  font-size: 12px;
+}
+.faw-notice button {
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+/* ---- List view ---- */
+.faw-list-view {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.faw-list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.faw-list-header h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 650;
+}
+.faw-list-header h2 span {
+  margin-left: 8px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--button-hover);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+.faw-new-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 13px;
+  border: 1px solid var(--accent);
+  border-radius: 7px;
+  background: var(--accent);
+  color: var(--accent-contrast);
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.faw-new-button:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+.faw-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+}
+.faw-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.faw-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+.faw-card-head strong {
+  color: var(--ink);
+  font-size: 13.5px;
+  font-weight: 650;
+}
+.faw-card-steps {
+  flex: 0 0 auto;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--button-hover);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.faw-card-description {
+  margin: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.faw-card-outcome {
+  margin: 0;
+  color: var(--button-text);
+  font-size: 11px;
+  line-height: 1.45;
+  font-style: italic;
+}
+.faw-card-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+.faw-card-actions button {
+  display: inline-flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 7px 8px;
+  border: 1px solid var(--button-border);
+  border-radius: 6px;
+  background: var(--button-surface);
+  color: var(--button-text);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.faw-card-actions button:hover:not(:disabled) {
+  background: var(--button-hover);
+}
+.faw-card-actions button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.faw-card-actions button.is-destructive {
+  color: var(--faw-bad);
+}
+.faw-empty {
+  display: grid;
+  min-height: 180px;
+  justify-items: center;
+  align-content: center;
+  gap: 8px;
+  padding: 28px;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  background: var(--canvas);
+  text-align: center;
+}
+.faw-empty svg {
+  color: var(--muted);
+}
+.faw-empty strong {
+  color: var(--ink);
+  font-size: 13px;
+}
+.faw-empty span {
+  max-width: 360px;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+/* ---- Builder ---- */
+.faw-builder {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  gap: 12px;
+}
+.faw-builder-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.faw-back-button,
+.faw-save-button,
+.faw-details-toggle {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.faw-back-button,
+.faw-details-toggle {
+  border: 1px solid var(--button-border);
+  background: var(--button-surface);
+  color: var(--button-text);
+}
+.faw-back-button:hover,
+.faw-details-toggle:hover {
+  background: var(--button-hover);
+}
+.faw-details-toggle.is-open {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.faw-save-button {
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+.faw-save-button:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+.faw-save-button:disabled {
+  opacity: 0.65;
+  cursor: default;
+}
+/* The workflow's name, styled as an editable title rather than a boxed
+   form field — it's the one piece of "metadata" important enough to stay
+   always visible, but it still shouldn't visually compete with the
+   steps/canvas below, which are the actual point of this screen. */
+.faw-builder-title-input {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 4px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 650;
+}
+.faw-builder-title-input::placeholder {
+  color: var(--muted);
+  font-weight: 500;
+}
+.faw-builder-title-input:hover {
+  border-color: var(--line);
+}
+.faw-builder-title-input:focus {
+  border-color: var(--accent);
+  background: var(--button-surface);
+  outline: none;
+}
+/* Everything else about a workflow (description, outcome, assertion) is
+   secondary — collapsed by default behind the "Details" toggle above. */
+.faw-details-panel {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.faw-details-panel label,
+.faw-step-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  color: var(--button-text);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.faw-details-panel input,
+.faw-details-panel textarea,
+.faw-step-form input,
+.faw-step-form select,
+.faw-step-form textarea {
+  padding: 8px 10px;
+  border: 1px solid var(--button-border);
+  border-radius: 6px;
+  background: var(--button-surface);
+  color: var(--ink);
+  font-size: 12.5px;
+  font-weight: 400;
+}
+.faw-details-panel textarea,
+.faw-step-form textarea {
+  min-height: 58px;
+  resize: vertical;
+  font-family: inherit;
+}
+.faw-details-panel input:focus,
+.faw-details-panel textarea:focus,
+.faw-step-form input:focus,
+.faw-step-form select:focus,
+.faw-step-form textarea:focus {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+.faw-assertion-toggle {
+  flex-direction: row !important;
+  align-items: center;
+  gap: 7px !important;
+}
+
+/* ---- Workspace: steps list (collapsible) + canvas, side by side ---- */
+.faw-workspace {
+  display: flex;
+  flex: 1;
+  min-height: 420px;
+  gap: 10px;
+}
+.faw-steps-list-panel {
+  display: flex;
+  flex: 0 0 240px;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  transition: flex-basis 150ms ease;
+}
+.faw-steps-list-panel.is-collapsed {
+  flex: 0 0 auto;
+}
+.faw-steps-list-head {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+}
+.faw-steps-list-panel.is-collapsed .faw-steps-list-head {
+  border-bottom: 0;
+}
+.faw-steps-list-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font-size: 11.5px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.faw-steps-list-toggle small {
+  margin-left: 2px;
+  color: var(--muted);
+  font-weight: 600;
+}
+.faw-steps-list-add {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid var(--button-border);
+  border-radius: 6px;
+  background: var(--button-surface);
+  color: var(--button-text);
+  cursor: pointer;
+}
+.faw-steps-list-add:hover {
+  background: var(--button-hover);
+}
+.faw-steps-list {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 8px;
+  list-style: none;
+  overflow: auto;
+}
+.faw-steps-list li {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 7px;
+}
+.faw-steps-list li.is-selected {
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.faw-steps-list-row {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  padding: 6px 7px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+.faw-steps-list-row-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  overflow: hidden;
+}
+.faw-steps-list-row-body strong {
+  font-size: 11.5px;
+  font-weight: 650;
+}
+.faw-steps-list-row-body small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.faw-steps-list-row-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 2px;
+  padding-right: 4px;
+}
+.faw-steps-list-row-actions button {
+  display: grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.faw-steps-list-row-actions button:hover:not(:disabled) {
+  background: var(--button-hover);
+  color: var(--button-text);
+}
+.faw-steps-list-row-actions button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.faw-steps-list-row-actions button.is-destructive:hover:not(:disabled) {
+  color: var(--faw-bad);
+}
+.faw-steps-list-empty {
+  padding: 10px 8px;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+/* ---- Canvas panel ---- */
+.faw-canvas-panel {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--canvas);
+  overflow: hidden;
+}
+.faw-step-node {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 220px;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+}
+.faw-step-node.selected {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.faw-step-node-index {
+  display: grid;
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--button-hover);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+}
+.faw-step-node-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  overflow: hidden;
+  min-width: 0;
+}
+.faw-step-node-body strong {
+  font-size: 11.5px;
+  font-weight: 650;
+}
+.faw-step-node-body small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.faw-add-step-node-wrap {
+  display: flex;
+}
+.faw-add-step-node {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: 1px dashed var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.faw-add-step-node:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Floating inspector docked to the canvas — this is where a step's logic
+   is actually configured, so it lives inside the canvas panel rather than
+   as a separate section of the page. */
+.faw-canvas-inspector {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(300px, calc(100% - 24px));
+  max-height: calc(100% - 24px);
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  overflow: auto;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+.faw-step-editor-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.faw-step-editor-head strong {
+  color: var(--ink);
+  font-size: 12.5px;
+}
+.faw-step-editor-actions {
+  display: flex;
+  gap: 4px;
+}
+.faw-step-editor-actions button {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  border: 1px solid var(--button-border);
+  border-radius: 6px;
+  background: var(--button-surface);
+  color: var(--button-text);
+  cursor: pointer;
+}
+.faw-step-editor-actions button:hover:not(:disabled) {
+  background: var(--button-hover);
+}
+.faw-step-editor-actions button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.faw-step-editor-actions button.is-destructive {
+  color: var(--faw-bad);
+}
+.faw-step-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* ---- Run panel (modal overlay) ---- */
+.faw-run-overlay {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 60;
+  display: flex;
+  justify-content: flex-end;
+  background: rgba(10, 16, 22, 0.35);
+}
+.faw-run-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(420px, 100%);
+  height: 100%;
+  padding: 18px;
+  border-left: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  overflow: auto;
+}
+.faw-run-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+.faw-run-head-title {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.faw-run-head-title strong {
+  font-size: 15px;
+  font-weight: 650;
+}
+.faw-run-close {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid var(--button-border);
+  border-radius: 7px;
+  background: var(--button-surface);
+  color: var(--button-text);
+  cursor: pointer;
+}
+.faw-run-close:hover {
+  background: var(--button-hover);
+}
+.faw-pill {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--button-hover);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.faw-pill.is-good {
+  background: var(--faw-good-bg);
+  color: var(--faw-good);
+}
+.faw-pill.is-bad {
+  background: var(--faw-bad-bg);
+  color: var(--faw-bad);
+}
+.faw-pill.is-active {
+  background: var(--faw-active-bg);
+  color: var(--faw-active);
+}
+.faw-outcome-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 650;
+}
+.faw-outcome-banner.is-good {
+  background: var(--faw-good-bg);
+  color: var(--faw-good);
+}
+.faw-outcome-banner.is-bad {
+  background: var(--faw-bad-bg);
+  color: var(--faw-bad);
+}
+.faw-run-error {
+  padding: 9px 11px;
+  border: 1px solid var(--faw-bad);
+  border-radius: 7px;
+  background: var(--faw-bad-bg);
+  color: var(--faw-bad);
+  font-size: 12px;
+}
+.faw-run-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.faw-run-step {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 10px 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--canvas);
+}
+.faw-run-step.is-good {
+  border-color: color-mix(in srgb, var(--faw-good) 35%, var(--line));
+}
+.faw-run-step.is-bad {
+  border-color: color-mix(in srgb, var(--faw-bad) 35%, var(--line));
+}
+.faw-run-step.is-active {
+  border-color: color-mix(in srgb, var(--faw-active) 35%, var(--line));
+}
+.faw-run-step-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.faw-run-step-head strong {
+  flex: 1;
+  font-size: 12px;
+  font-weight: 650;
+}
+.faw-run-step-status {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 650;
+  text-transform: uppercase;
+}
+.faw-run-step-summary {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+.faw-run-step-error {
+  margin: 0;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--faw-bad-bg);
+  color: var(--faw-bad);
+  font-size: 11px;
+}
+.faw-run-step-evidence {
+  width: 100%;
+  margin-top: 2px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.faw-spin {
+  animation: faw-spin 0.8s linear infinite;
+}
+@keyframes faw-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 760px) {
+  .faw-workspace {
+    flex-direction: column;
+    min-height: unset;
+  }
+  .faw-steps-list-panel {
+    flex: 0 0 auto;
+    max-height: 220px;
+  }
+  .faw-canvas-panel {
+    min-height: 360px;
+  }
+}

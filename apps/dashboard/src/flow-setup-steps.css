@@ -1,0 +1,93 @@
+.setup-steps-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.setup-step-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  overflow: hidden;
+}
+.setup-step-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px 4px 10px;
+}
+.setup-step-card-toggle {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 0;
+  background: none;
+  border: 0;
+  text-align: left;
+  cursor: pointer;
+}
+.setup-step-index {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--canvas);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 650;
+}
+.setup-step-card-toggle strong {
+  flex: 0 0 auto;
+  font-size: 12px;
+  color: var(--ink, #25364d);
+}
+.setup-step-summary {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--muted);
+}
+.setup-step-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.setup-step-actions button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.setup-step-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 4px 12px 12px;
+  border-top: 1px solid var(--line);
+}
+.setup-step-form label {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+}
+.setup-step-form label > span {
+  font-size: 10px;
+}
+.setup-step-form input,
+.setup-step-form select {
+  display: block;
+  width: 100%;
+  border: 1px solid #dbe5f2;
+  background: #fcfdff;
+  border-radius: 7px;
+  padding: 9px 10px;
+  margin-top: 6px;
+  color: #7690b3;
+  font-size: 12px;
+}

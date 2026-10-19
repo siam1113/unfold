@@ -153,20 +153,30 @@ export function WorkerSwimlanes({
   }, [data.tasks]);
   const branches = useMemo(() => {
     const workerIds = new Set<number>([
-      ...states.flatMap((state) => (state.worker === null ? [] : [state.worker])),
+      ...states.flatMap((state) =>
+        state.worker === null ? [] : [state.worker],
+      ),
       ...actions.map((action) => action.worker),
-      ...data.tasks.flatMap((task) => task.worker === undefined ? [] : [task.worker]),
-      ...data.events.flatMap((event) => event.worker === undefined ? [] : [event.worker]),
+      ...data.tasks.flatMap((task) =>
+        task.worker === undefined ? [] : [task.worker],
+      ),
+      ...data.events.flatMap((event) =>
+        event.worker === undefined ? [] : [event.worker],
+      ),
     ]);
-    return [...workerIds].sort((a, b) => a - b).map((worker) => {
-      const workerActions = actions
-        .filter((action) => action.worker === worker)
-        .sort((a, b) => safeTimestamp(a.createdAt) - safeTimestamp(b.createdAt));
-      const tasks = data.tasks.filter((task) => task.worker === worker);
-      const workerStates = states.filter((state) => state.worker === worker);
-      const events = data.events.filter((event) => event.worker === worker);
-      return { worker, workerActions, tasks, workerStates, events };
-    });
+    return [...workerIds]
+      .sort((a, b) => a - b)
+      .map((worker) => {
+        const workerActions = actions
+          .filter((action) => action.worker === worker)
+          .sort(
+            (a, b) => safeTimestamp(a.createdAt) - safeTimestamp(b.createdAt),
+          );
+        const tasks = data.tasks.filter((task) => task.worker === worker);
+        const workerStates = states.filter((state) => state.worker === worker);
+        const events = data.events.filter((event) => event.worker === worker);
+        return { worker, workerActions, tasks, workerStates, events };
+      });
   }, [actions, data.events, data.tasks, states]);
 
   return (
@@ -306,69 +316,128 @@ export function WorkerSwimlanes({
         <div className="flow-ops-branches">
           <div className="flow-ops-subheading">
             <h3>Worker branch evidence</h3>
-            <span>Timestamp order is descriptive; arrows show each recorded action link, and task assignments are a run snapshot.</span>
+            <span>
+              Timestamp order is descriptive; arrows show each recorded action
+              link, and task assignments are a run snapshot.
+            </span>
           </div>
           <div className="flow-ops-branch-grid">
-            {branches.map(({ worker, workerActions, tasks, workerStates, events }) => {
-              const statuses = ["done", "failed", "leased", "pending"] as const;
-              const latestAction = workerActions[workerActions.length - 1];
-              const latestTarget = latestAction?.toStateId
-                ? states.find((state) => state.id === latestAction.toStateId)
-                : undefined;
-              return (
-                <article className="flow-ops-branch" key={worker}>
-                  <header>
-                    <strong><Bot size={14} aria-hidden="true" /> Worker {worker}</strong>
-                    <span>{workerStates.length} states · {workerActions.length} actions · {events.length} events</span>
-                  </header>
-                  <div className="flow-ops-branch-end">
-                    <span>Latest recorded action outcome</span>
-                    <b>{latestAction
-                      ? latestTarget
-                        ? `Reached ${stateTitle(latestTarget)}`
-                        : latestAction.decision === "failed"
-                          ? "Failed; destination not recorded"
-                          : latestAction.decision === "skipped_policy"
-                            ? "Skipped by policy"
-                            : "No destination state recorded"
-                      : "No action edge recorded"}</b>
-                  </div>
-                  {workerActions.length > 0 ? (
-                    <ol className="flow-ops-branch-path">
-                      {workerActions.map((action) => (
-                        <li key={action.id}>
-                          <button type="button" onClick={() => onSelect({ kind: "action", id: action.id })}>
-                            <span>Depth {action.depth} · {action.action} {action.targetName || "control"}</span>
-                            <b>{(() => {
-                              const source = states.find((state) => state.id === action.fromStateId);
-                              return source ? stateTitle(source) : "Source state not recorded";
-                            })()}</b>
-                            <small>→ {action.toStateId
-                              ? (() => {
-                                  const target = states.find((state) => state.id === action.toStateId);
-                                  return target ? stateTitle(target) : "Destination state missing";
-                                })()
-                              : action.decision === "failed"
-                                ? "failed; no destination"
-                                : action.decision === "skipped_policy"
-                                  ? "skipped by policy"
-                                  : "destination not recorded"}</small>
-                          </button>
-                        </li>
-                      ))}
-                    </ol>
-                  ) : (
-                    <p className="flow-ops-branch-missing">No action links recorded for this worker.</p>
-                  )}
-                  <div className="flow-ops-branch-task-status" aria-label={`Worker ${worker} task statuses`}>
-                    {tasks.length ? statuses.map((status) => {
-                      const count = tasks.filter((task) => task.status === status).length;
-                      return count ? <span className={`flow-ops-status ${status}`} key={status}>{count} {status}</span> : null;
-                    }) : <span className="flow-ops-branch-missing">No linked task assignment</span>}
-                  </div>
-                </article>
-              );
-            })}
+            {branches.map(
+              ({ worker, workerActions, tasks, workerStates, events }) => {
+                const statuses = [
+                  "done",
+                  "failed",
+                  "leased",
+                  "pending",
+                ] as const;
+                const latestAction = workerActions[workerActions.length - 1];
+                const latestTarget = latestAction?.toStateId
+                  ? states.find((state) => state.id === latestAction.toStateId)
+                  : undefined;
+                return (
+                  <article className="flow-ops-branch" key={worker}>
+                    <header>
+                      <strong>
+                        <Bot size={14} aria-hidden="true" /> Worker {worker}
+                      </strong>
+                      <span>
+                        {workerStates.length} states · {workerActions.length}{" "}
+                        actions · {events.length} events
+                      </span>
+                    </header>
+                    <div className="flow-ops-branch-end">
+                      <span>Latest recorded action outcome</span>
+                      <b>
+                        {latestAction
+                          ? latestTarget
+                            ? `Reached ${stateTitle(latestTarget)}`
+                            : latestAction.decision === "failed"
+                              ? "Failed; destination not recorded"
+                              : latestAction.decision === "skipped_policy"
+                                ? "Skipped by policy"
+                                : "No destination state recorded"
+                          : "No action edge recorded"}
+                      </b>
+                    </div>
+                    {workerActions.length > 0 ? (
+                      <ol className="flow-ops-branch-path">
+                        {workerActions.map((action) => (
+                          <li key={action.id}>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                onSelect({ kind: "action", id: action.id })
+                              }
+                            >
+                              <span>
+                                Depth {action.depth} · {action.action}{" "}
+                                {action.targetName || "control"}
+                              </span>
+                              <b>
+                                {(() => {
+                                  const source = states.find(
+                                    (state) => state.id === action.fromStateId,
+                                  );
+                                  return source
+                                    ? stateTitle(source)
+                                    : "Source state not recorded";
+                                })()}
+                              </b>
+                              <small>
+                                →{" "}
+                                {action.toStateId
+                                  ? (() => {
+                                      const target = states.find(
+                                        (state) =>
+                                          state.id === action.toStateId,
+                                      );
+                                      return target
+                                        ? stateTitle(target)
+                                        : "Destination state missing";
+                                    })()
+                                  : action.decision === "failed"
+                                    ? "failed; no destination"
+                                    : action.decision === "skipped_policy"
+                                      ? "skipped by policy"
+                                      : "destination not recorded"}
+                              </small>
+                            </button>
+                          </li>
+                        ))}
+                      </ol>
+                    ) : (
+                      <p className="flow-ops-branch-missing">
+                        No action links recorded for this worker.
+                      </p>
+                    )}
+                    <div
+                      className="flow-ops-branch-task-status"
+                      aria-label={`Worker ${worker} task statuses`}
+                    >
+                      {tasks.length ? (
+                        statuses.map((status) => {
+                          const count = tasks.filter(
+                            (task) => task.status === status,
+                          ).length;
+                          return count ? (
+                            <span
+                              className={`flow-ops-status ${status}`}
+                              key={status}
+                            >
+                              {count} {status}
+                            </span>
+                          ) : null;
+                        })
+                      ) : (
+                        <span className="flow-ops-branch-missing">
+                          No linked task assignment
+                        </span>
+                      )}
+                    </div>
+                  </article>
+                );
+              },
+            )}
           </div>
         </div>
       )}
@@ -423,28 +492,42 @@ export function FrontierQueueMap({
       ...states.map((state) => state.depth),
       ..._actions.map((action) => action.depth),
     ]);
-    return [...depthSet].sort((a, b) => a - b).map((depth) => {
-      const tasks = data.tasks.filter((task) => task.depth === depth);
-      const depthStates = states.filter((state) => state.depth === depth);
-      const depthActions = _actions.filter((action) => action.depth === depth);
-      const workers = new Set<number>([
-        ...tasks.flatMap((task) => task.worker === undefined ? [] : [task.worker]),
-        ...depthActions.map((action) => action.worker),
-        ...depthStates.flatMap((state) => state.worker === null ? [] : [state.worker]),
-      ]);
-      return {
-        depth, tasks, stateCount: depthStates.length, actionCount: depthActions.length,
-        workerCount: workers.size,
-        statuses: {
-          done: tasks.filter((task) => task.status === "done").length,
-          failed: tasks.filter((task) => task.status === "failed").length,
-          leased: tasks.filter((task) => task.status === "leased").length,
-          pending: tasks.filter((task) => task.status === "pending").length,
-        },
-      };
-    });
+    return [...depthSet]
+      .sort((a, b) => a - b)
+      .map((depth) => {
+        const tasks = data.tasks.filter((task) => task.depth === depth);
+        const depthStates = states.filter((state) => state.depth === depth);
+        const depthActions = _actions.filter(
+          (action) => action.depth === depth,
+        );
+        const workers = new Set<number>([
+          ...tasks.flatMap((task) =>
+            task.worker === undefined ? [] : [task.worker],
+          ),
+          ...depthActions.map((action) => action.worker),
+          ...depthStates.flatMap((state) =>
+            state.worker === null ? [] : [state.worker],
+          ),
+        ]);
+        return {
+          depth,
+          tasks,
+          stateCount: depthStates.length,
+          actionCount: depthActions.length,
+          workerCount: workers.size,
+          statuses: {
+            done: tasks.filter((task) => task.status === "done").length,
+            failed: tasks.filter((task) => task.status === "failed").length,
+            leased: tasks.filter((task) => task.status === "leased").length,
+            pending: tasks.filter((task) => task.status === "pending").length,
+          },
+        };
+      });
   }, [data.tasks, states, _actions]);
-  const maxDepthTasks = Math.max(1, ...depthHealth.map((group) => group.tasks.length));
+  const maxDepthTasks = Math.max(
+    1,
+    ...depthHealth.map((group) => group.tasks.length),
+  );
 
   return (
     <section className="flow-ops" aria-labelledby="flow-ops-frontier-title">
@@ -474,21 +557,47 @@ export function FrontierQueueMap({
       </div>
 
       {depthHealth.length > 0 && (
-        <div className="flow-ops-funnel" aria-label="Observed crawl depth funnel">
+        <div
+          className="flow-ops-funnel"
+          aria-label="Observed crawl depth funnel"
+        >
           {depthHealth.map((group) => (
             <article className="flow-ops-funnel-depth" key={group.depth}>
-              <header><strong>Depth {group.depth}</strong><span>{group.tasks.length} recorded tasks</span></header>
+              <header>
+                <strong>Depth {group.depth}</strong>
+                <span>{group.tasks.length} recorded tasks</span>
+              </header>
               <div className="flow-ops-funnel-bar" aria-hidden="true">
-                <span style={{ width: `${Math.max(5, group.tasks.length / maxDepthTasks * 100)}%` }} />
+                <span
+                  style={{
+                    width: `${Math.max(5, (group.tasks.length / maxDepthTasks) * 100)}%`,
+                  }}
+                />
               </div>
               <div className="flow-ops-funnel-counts">
-                <span><b>{group.statuses.done}</b> done</span>
-                <span><b>{group.statuses.failed}</b> failed</span>
-                <span><b>{group.statuses.leased}</b> leased</span>
-                <span><b>{group.statuses.pending}</b> pending</span>
+                <span>
+                  <b>{group.statuses.done}</b> done
+                </span>
+                <span>
+                  <b>{group.statuses.failed}</b> failed
+                </span>
+                <span>
+                  <b>{group.statuses.leased}</b> leased
+                </span>
+                <span>
+                  <b>{group.statuses.pending}</b> pending
+                </span>
               </div>
-              <footer>{group.stateCount} observed states · {group.actionCount} observed actions · {group.workerCount} workers</footer>
-              {group.tasks.length === 0 && <small className="flow-ops-funnel-unknown">No task records at this observed depth; task outcome coverage is unknown.</small>}
+              <footer>
+                {group.stateCount} observed states · {group.actionCount}{" "}
+                observed actions · {group.workerCount} workers
+              </footer>
+              {group.tasks.length === 0 && (
+                <small className="flow-ops-funnel-unknown">
+                  No task records at this observed depth; task outcome coverage
+                  is unknown.
+                </small>
+              )}
             </article>
           ))}
         </div>

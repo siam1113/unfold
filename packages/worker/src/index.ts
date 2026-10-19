@@ -10,22 +10,33 @@ import { resolve, dirname } from "node:path";
 import { unzipSync, zipSync, strFromU8, strToU8 } from "fflate";
 import { allowedUrl, riskyUrl, decide } from "../../core/src/policy.js";
 import { classify, redact } from "../../analysis/src/index.js";
-import type {
-  ScanConfig,
-  TaskLease,
-  AppState,
-  UIElement,
-  ActionEdge,
-  Observation,
-  Component,
-  RecipeStep,
-  ApiCall,
-  BrowserEvent,
-  BrowserEvidence,
+import {
+  synthesizeFormValue,
+  type ScanConfig,
+  type TaskLease,
+  type AppState,
+  type UIElement,
+  type ActionEdge,
+  type Observation,
+  type Component,
+  type RecipeStep,
+  type ApiCall,
+  type BrowserEvent,
+  type BrowserEvidence,
 } from "../../shared/src/index.js";
 import { Store, artifactRoot } from "../../storage/src/index.js";
-import { observe, resolveTarget, stabilize, verify } from "./observe.js";
-import { probeIsolatedContextPersistence, snapshotBrowserPage } from "./browser-evidence.js";
+import {
+  performAction,
+  resolveTarget,
+  settle,
+  trackPageRequests,
+  verify,
+} from "./observe.js";
+import {
+  probeIsolatedContextPersistence,
+  snapshotBrowserPage,
+} from "./browser-evidence.js";
+import { llmRecover } from "./llm-recover.js";
 export { chromium };
 export interface ProbeResult {
   observation?: Observation;
@@ -59,7 +70,8 @@ const permissionGroup = (name: string): BrowserEvent["permission"] => {
   if (/clipboard/.test(name)) return "clipboard";
   if (name === "midi" || name === "push") return name;
   if (/storage/.test(name)) return "storage";
-  if (/accelerometer|gyroscope|magnetometer|sensors/.test(name)) return "sensors";
+  if (/accelerometer|gyroscope|magnetometer|sensors/.test(name))
+    return "sensors";
   if (name === "usb") return "usb";
   if (name === "serial") return "serial";
   if (name === "bluetooth") return "bluetooth";
@@ -179,6 +191,10 @@ async function sanitizedTrace(context: BrowserContext, path: string) {
   await writeFile(path, zipSync(clean));
 }
 export class BrowserWorker {
+  // Keyed by worker slot (the `index` each Coordinator loop lane is assigned),
+  // not by task — holds whichever Page that slot is currently driving so a
+  // live-view screenshot request can find it between tasks.
+  private currentPages = new Map<number, Page>();
   constructor(
     private browser: Browser,
     private store: Store,
@@ -196,6 +212,12 @@ export class BrowserWorker {
       signals: string[] = [];
     const apiCalls: ApiCall[] = [];
     const apiCallsByRequest = new Map<object, ApiCall>();
+    // Writes are allowed by default (see networkWriteBlocklist), but still
+    // surfaced to the activity log so the user sees exactly what fired
+    // instead of it happening invisibly — one event per distinct
+    // method+path per task, not per request, so a busy endpoint (e.g.
+    // autosave on every keystroke) doesn't spam the log.
+    const loggedWrites = new Set<string>();
     const pendingApiBodies: Promise<void>[] = [];
     const settleApiBodies = () =>
       Promise.allSettled(pendingApiBodies).then(() => undefined);
@@ -206,12 +228,20 @@ export class BrowserWorker {
     let browserBefore: BrowserEvidence["before"] | undefined;
     const recordBrowserEvent = (event: Omit<BrowserEvent, "offsetMs">) => {
       if (task.kind !== "action" || !acting) return;
-      const aggregate = event.kind === "network_request" || event.kind === "network_response" || event.kind === "redirect";
+      const aggregate =
+        event.kind === "network_request" ||
+        event.kind === "network_response" ||
+        event.kind === "redirect";
       if (aggregate) {
-        const current = browserEvents.find((item) =>
-          item.kind === event.kind && item.tabId === event.tabId && item.origin === event.origin &&
-          item.status === event.status && item.method === event.method &&
-          item.resourceType === event.resourceType && item.failed === event.failed,
+        const current = browserEvents.find(
+          (item) =>
+            item.kind === event.kind &&
+            item.tabId === event.tabId &&
+            item.origin === event.origin &&
+            item.status === event.status &&
+            item.method === event.method &&
+            item.resourceType === event.resourceType &&
+            item.failed === event.failed,
         );
         if (current) {
           current.count = (current.count || 1) + 1;
@@ -227,8 +257,6 @@ export class BrowserWorker {
     };
     const context = await this.browser.newContext({
       viewport: c.viewport,
-      userAgent:
-        "Mozilla/5.0 (compatible; Unfold/1.0; authorized application discovery)",
       storageState:
         c.authStatePath && existsSync(c.authStatePath)
           ? c.authStatePath
@@ -256,7 +284,8 @@ export class BrowserWorker {
     };
     const popupTabIdFor = (id: string) => {
       let hash = 2166136261;
-      for (const character of id) hash = Math.imul(hash ^ character.charCodeAt(0), 16777619);
+      for (const character of id)
+        hash = Math.imul(hash ^ character.charCodeAt(0), 16777619);
       return `tab-${(hash >>> 0).toString(36)}`;
     };
     const recordTabSignal = (p: Page, event: string) => {
@@ -283,10 +312,13 @@ export class BrowserWorker {
           data.kind === "go" ||
           data.kind === "popstate"
         ) {
-          const suffix = data.kind === "go" && typeof data.delta === "number" &&
-            Number.isInteger(data.delta) && Math.abs(data.delta) <= 1000
-            ? `:${data.delta}`
-            : "";
+          const suffix =
+            data.kind === "go" &&
+            typeof data.delta === "number" &&
+            Number.isInteger(data.delta) &&
+            Math.abs(data.delta) <= 1000
+              ? `:${data.delta}`
+              : "";
           recordTabSignal(p, `history:${data.kind}${suffix}`);
         }
       },
@@ -295,17 +327,38 @@ export class BrowserWorker {
     // The binding validates these again so page code cannot attach arbitrary
     // text, attribute values, permission names, or URLs to action evidence.
     const lifecyclePermissions = new Set([
-      "notifications", "geolocation", "camera", "microphone", "clipboard-read",
-      "clipboard-write", "midi", "push", "persistent-storage", "background-sync",
-      "screen-wake-lock", "accelerometer", "gyroscope", "magnetometer", "local-fonts",
-      "payment-handler", "usb", "serial", "bluetooth", "idle-detection", "window-management",
+      "notifications",
+      "geolocation",
+      "camera",
+      "microphone",
+      "clipboard-read",
+      "clipboard-write",
+      "midi",
+      "push",
+      "persistent-storage",
+      "background-sync",
+      "screen-wake-lock",
+      "accelerometer",
+      "gyroscope",
+      "magnetometer",
+      "local-fonts",
+      "payment-handler",
+      "usb",
+      "serial",
+      "bluetooth",
+      "idle-detection",
+      "window-management",
     ]);
     await context.exposeBinding(
       "__unfoldRecordLifecycle",
       (source, payload: unknown) => {
         const p = source.page;
         if (!p || !payload || typeof payload !== "object") return;
-        const data = payload as { category?: unknown; value?: unknown; kind?: unknown };
+        const data = payload as {
+          category?: unknown;
+          value?: unknown;
+          kind?: unknown;
+        };
         const simpleValues: Record<string, ReadonlySet<string>> = {
           document: new Set(["loading", "interactive", "complete"]),
           navigation: new Set(["navigate", "reload", "back_forward"]),
@@ -313,39 +366,65 @@ export class BrowserWorker {
           alert: new Set(["present", "absent"]),
           live_region: new Set(["present", "absent"]),
         };
-        if (typeof data.category === "string" && typeof data.value === "string" && simpleValues[data.category]?.has(data.value)) {
+        if (
+          typeof data.category === "string" &&
+          typeof data.value === "string" &&
+          simpleValues[data.category]?.has(data.value)
+        ) {
           recordTabSignal(p, `lifecycle:${data.category}:${data.value}`);
           return;
         }
         if (data.category === "timing") {
           const timingKinds = new Set([
-            "navigation_duration_ms", "dom_content_loaded_ms", "load_ms",
-            "first_paint_ms", "first_contentful_paint_ms",
+            "navigation_duration_ms",
+            "dom_content_loaded_ms",
+            "load_ms",
+            "first_paint_ms",
+            "first_contentful_paint_ms",
           ]);
           if (
-            typeof data.kind === "string" && timingKinds.has(data.kind) &&
-            typeof data.value === "string" && /^\d{1,8}$/.test(data.value)
+            typeof data.kind === "string" &&
+            timingKinds.has(data.kind) &&
+            typeof data.value === "string" &&
+            /^\d{1,8}$/.test(data.value)
           ) {
             const value = Number(data.value);
-            if (Number.isSafeInteger(value) && value >= 0 && value <= 86_400_000)
+            if (
+              Number.isSafeInteger(value) &&
+              value >= 0 &&
+              value <= 86_400_000
+            )
               recordTabSignal(p, `lifecycle:timing:${data.kind}:${value}`);
           }
           return;
         }
         if (
-          data.category === "permission_query" || data.category === "permission_request"
+          data.category === "permission_query" ||
+          data.category === "permission_request"
         ) {
           if (
-            typeof data.kind === "string" && lifecyclePermissions.has(data.kind) &&
-            typeof data.value === "string" && ["prompt", "granted", "denied", "other"].includes(data.value)
+            typeof data.kind === "string" &&
+            lifecyclePermissions.has(data.kind) &&
+            typeof data.value === "string" &&
+            ["prompt", "granted", "denied", "other"].includes(data.value)
           ) {
-            recordTabSignal(p, `lifecycle:${data.category}:${data.kind}:${data.value}`);
-            if (data.category === "permission_request" || data.category === "permission_query")
+            recordTabSignal(
+              p,
+              `lifecycle:${data.category}:${data.kind}:${data.value}`,
+            );
+            if (
+              data.category === "permission_request" ||
+              data.category === "permission_query"
+            )
               recordBrowserEvent({
                 kind: data.category,
                 tabId: tabIdFor(p),
                 permission: permissionGroup(data.kind),
-                permissionState: data.value as "prompt" | "granted" | "denied" | "other",
+                permissionState: data.value as
+                  | "prompt"
+                  | "granted"
+                  | "denied"
+                  | "other",
                 outcome: "observed",
               });
           }
@@ -355,16 +434,27 @@ export class BrowserWorker {
     await context.addInitScript(() => {
       const report = (kind: string, delta?: number) => {
         try {
-          const send = (window as typeof window & {
-            __unfoldRecordNavigation?: (event: { kind: string; delta?: number }) => void;
-          }).__unfoldRecordNavigation;
+          const send = (
+            window as typeof window & {
+              __unfoldRecordNavigation?: (event: {
+                kind: string;
+                delta?: number;
+              }) => void;
+            }
+          ).__unfoldRecordNavigation;
           send?.({ kind, delta });
         } catch {
           // Instrumentation must not change application behavior.
         }
       };
       const history = window.history;
-      for (const name of ["pushState", "replaceState", "back", "forward", "go"] as const) {
+      for (const name of [
+        "pushState",
+        "replaceState",
+        "back",
+        "forward",
+        "go",
+      ] as const) {
         const original = history[name];
         try {
           Object.defineProperty(history, name, {
@@ -372,7 +462,12 @@ export class BrowserWorker {
             writable: true,
             value: function (this: History, ...args: unknown[]) {
               const result = Reflect.apply(original, this, args);
-              report(name, name === "go" && typeof args[0] === "number" ? args[0] : undefined);
+              report(
+                name,
+                name === "go" && typeof args[0] === "number"
+                  ? args[0]
+                  : undefined,
+              );
               return result;
             },
           });
@@ -383,25 +478,64 @@ export class BrowserWorker {
       window.addEventListener("popstate", () => report("popstate"));
     });
     await context.addInitScript(() => {
-      type LifecycleCategory = "document" | "navigation" | "aria_busy" | "alert" | "live_region" | "permission_query" | "permission_request" | "timing";
+      type LifecycleCategory =
+        | "document"
+        | "navigation"
+        | "aria_busy"
+        | "alert"
+        | "live_region"
+        | "permission_query"
+        | "permission_request"
+        | "timing";
       const permissions = new Set([
-        "notifications", "geolocation", "camera", "microphone", "clipboard-read",
-        "clipboard-write", "midi", "push", "persistent-storage", "background-sync",
-        "screen-wake-lock", "accelerometer", "gyroscope", "magnetometer", "local-fonts",
-        "payment-handler", "usb", "serial", "bluetooth", "idle-detection", "window-management",
+        "notifications",
+        "geolocation",
+        "camera",
+        "microphone",
+        "clipboard-read",
+        "clipboard-write",
+        "midi",
+        "push",
+        "persistent-storage",
+        "background-sync",
+        "screen-wake-lock",
+        "accelerometer",
+        "gyroscope",
+        "magnetometer",
+        "local-fonts",
+        "payment-handler",
+        "usb",
+        "serial",
+        "bluetooth",
+        "idle-detection",
+        "window-management",
       ]);
-      const report = (category: LifecycleCategory, value: string, kind?: string) => {
+      const report = (
+        category: LifecycleCategory,
+        value: string,
+        kind?: string,
+      ) => {
         try {
-          const send = (window as typeof window & {
-            __unfoldRecordLifecycle?: (event: { category: LifecycleCategory; value: string; kind?: string }) => void;
-          }).__unfoldRecordLifecycle;
+          const send = (
+            window as typeof window & {
+              __unfoldRecordLifecycle?: (event: {
+                category: LifecycleCategory;
+                value: string;
+                kind?: string;
+              }) => void;
+            }
+          ).__unfoldRecordLifecycle;
           send?.({ category, value, kind });
         } catch {
           // Instrumentation must not change application behavior.
         }
       };
       const last = new Map<string, string>();
-      const reportOnce = (category: LifecycleCategory, value: string, kind?: string) => {
+      const reportOnce = (
+        category: LifecycleCategory,
+        value: string,
+        kind?: string,
+      ) => {
         const key = `${category}:${kind || ""}`;
         if (last.get(key) === value) return;
         last.set(key, value);
@@ -409,7 +543,12 @@ export class BrowserWorker {
       };
       const readiness = () => {
         const state = document.readyState;
-        if (state === "loading" || state === "interactive" || state === "complete") reportOnce("document", state);
+        if (
+          state === "loading" ||
+          state === "interactive" ||
+          state === "complete"
+        )
+          reportOnce("document", state);
       };
       readiness();
       document.addEventListener("readystatechange", readiness);
@@ -417,56 +556,90 @@ export class BrowserWorker {
       window.addEventListener("load", readiness, { once: true });
 
       const navigationType = () => {
-        const entry = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
+        const entry = performance.getEntriesByType("navigation")[0] as
+          | PerformanceNavigationTiming
+          | undefined;
         const type = entry?.type;
-        if (type === "navigate" || type === "reload" || type === "back_forward") reportOnce("navigation", type);
+        if (type === "navigate" || type === "reload" || type === "back_forward")
+          reportOnce("navigation", type);
       };
       navigationType();
-      document.addEventListener("DOMContentLoaded", navigationType, { once: true });
+      document.addEventListener("DOMContentLoaded", navigationType, {
+        once: true,
+      });
       window.addEventListener("pageshow", navigationType, { once: true });
 
       const reportTiming = (kind: string, raw: number | undefined) => {
         if (typeof raw !== "number" || !Number.isFinite(raw) || raw < 0) return;
-        reportOnce("timing", String(Math.min(Math.round(raw), 86_400_000)), kind);
+        reportOnce(
+          "timing",
+          String(Math.min(Math.round(raw), 86_400_000)),
+          kind,
+        );
       };
       const navigationTimings = () => {
-        const entry = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
+        const entry = performance.getEntriesByType("navigation")[0] as
+          | PerformanceNavigationTiming
+          | undefined;
         if (!entry) return;
         reportTiming("navigation_duration_ms", entry.duration);
         // Zero means the browser did not expose a completed event timestamp.
         // Keep it unknown rather than treating a missing metric as zero delay.
-        if (entry.domContentLoadedEventEnd > 0) reportTiming("dom_content_loaded_ms", entry.domContentLoadedEventEnd);
+        if (entry.domContentLoadedEventEnd > 0)
+          reportTiming("dom_content_loaded_ms", entry.domContentLoadedEventEnd);
         if (entry.loadEventEnd > 0) reportTiming("load_ms", entry.loadEventEnd);
       };
       navigationTimings();
-      document.addEventListener("DOMContentLoaded", navigationTimings, { once: true });
+      document.addEventListener("DOMContentLoaded", navigationTimings, {
+        once: true,
+      });
       window.addEventListener("load", navigationTimings, { once: true });
       const capturePaintEntries = (entries: PerformanceEntry[]) => {
         for (const entry of entries) {
           if (entry.entryType !== "paint" || entry.startTime < 0) continue;
-          if (entry.name === "first-paint") reportTiming("first_paint_ms", entry.startTime);
-          if (entry.name === "first-contentful-paint") reportTiming("first_contentful_paint_ms", entry.startTime);
+          if (entry.name === "first-paint")
+            reportTiming("first_paint_ms", entry.startTime);
+          if (entry.name === "first-contentful-paint")
+            reportTiming("first_contentful_paint_ms", entry.startTime);
         }
       };
       try {
         capturePaintEntries(performance.getEntriesByType("paint"));
-        if (typeof PerformanceObserver !== "undefined" && PerformanceObserver.supportedEntryTypes?.includes("paint")) {
-          const paintObserver = new PerformanceObserver((list) => capturePaintEntries(list.getEntries()));
+        if (
+          typeof PerformanceObserver !== "undefined" &&
+          PerformanceObserver.supportedEntryTypes?.includes("paint")
+        ) {
+          const paintObserver = new PerformanceObserver((list) =>
+            capturePaintEntries(list.getEntries()),
+          );
           paintObserver.observe({ type: "paint", buffered: true });
         }
-      } catch { /* Paint timing is optional in some browser contexts. */ }
+      } catch {
+        /* Paint timing is optional in some browser contexts. */
+      }
 
       const visible = (node: Element) => {
         if (!node.getClientRects().length) return false;
         const style = getComputedStyle(node);
-        return style.display !== "none" && style.visibility !== "hidden" && style.visibility !== "collapse" && style.opacity !== "0";
+        return (
+          style.display !== "none" &&
+          style.visibility !== "hidden" &&
+          style.visibility !== "collapse" &&
+          style.opacity !== "0"
+        );
       };
       let scheduled = false;
       const updateUiCues = () => {
         scheduled = false;
         const busy = document.querySelector('[aria-busy="true"]') !== null;
-        const alert = Array.from(document.querySelectorAll('[role="alert"]')).some(visible);
-        const live = Array.from(document.querySelectorAll('[aria-live]:not([aria-live="off"]), [role="status"], [role="log"]')).some(visible);
+        const alert = Array.from(
+          document.querySelectorAll('[role="alert"]'),
+        ).some(visible);
+        const live = Array.from(
+          document.querySelectorAll(
+            '[aria-live]:not([aria-live="off"]), [role="status"], [role="log"]',
+          ),
+        ).some(visible);
         reportOnce("aria_busy", busy ? "present" : "absent");
         reportOnce("alert", alert ? "present" : "absent");
         reportOnce("live_region", live ? "present" : "absent");
@@ -479,17 +652,28 @@ export class BrowserWorker {
       updateUiCues();
       const observer = new MutationObserver(scheduleUiCues);
       const observe = () => {
-        if (document.documentElement) observer.observe(document.documentElement, {
-          subtree: true,
-          childList: true,
-          attributes: true,
-          attributeFilter: ["aria-busy", "aria-live", "role", "style", "hidden", "class"],
-        });
+        if (document.documentElement)
+          observer.observe(document.documentElement, {
+            subtree: true,
+            childList: true,
+            attributes: true,
+            attributeFilter: [
+              "aria-busy",
+              "aria-live",
+              "role",
+              "style",
+              "hidden",
+              "class",
+            ],
+          });
       };
       observe();
       document.addEventListener("DOMContentLoaded", observe, { once: true });
 
-      const permissionState = (value: unknown) => value === "prompt" || value === "granted" || value === "denied" ? value : "other";
+      const permissionState = (value: unknown) =>
+        value === "prompt" || value === "granted" || value === "denied"
+          ? value
+          : "other";
       try {
         const permissionsObject = navigator.permissions;
         const originalQuery = permissionsObject?.query;
@@ -497,17 +681,37 @@ export class BrowserWorker {
           Object.defineProperty(permissionsObject, "query", {
             configurable: true,
             writable: true,
-            value: function (this: Permissions, descriptor: PermissionDescriptor) {
-              const kind = typeof descriptor?.name === "string" && permissions.has(descriptor.name) ? descriptor.name : undefined;
+            value: function (
+              this: Permissions,
+              descriptor: PermissionDescriptor,
+            ) {
+              const kind =
+                typeof descriptor?.name === "string" &&
+                permissions.has(descriptor.name)
+                  ? descriptor.name
+                  : undefined;
               const result = Reflect.apply(originalQuery, this, [descriptor]);
-              if (kind) void Promise.resolve(result).then((status) => report("permission_query", permissionState(status.state), kind)).catch(() => {});
+              if (kind)
+                void Promise.resolve(result)
+                  .then((status) =>
+                    report(
+                      "permission_query",
+                      permissionState(status.state),
+                      kind,
+                    ),
+                  )
+                  .catch(() => {});
               return result;
             },
           });
         }
-      } catch { /* Permission instrumentation is best-effort. */ }
+      } catch {
+        /* Permission instrumentation is best-effort. */
+      }
       try {
-        const notification = (window as typeof window & { Notification?: typeof Notification }).Notification;
+        const notification = (
+          window as typeof window & { Notification?: typeof Notification }
+        ).Notification;
         const originalRequest = notification?.requestPermission;
         if (notification && originalRequest) {
           Object.defineProperty(notification, "requestPermission", {
@@ -516,12 +720,24 @@ export class BrowserWorker {
             value: function (...args: unknown[]) {
               report("permission_request", "prompt", "notifications");
               const result = Reflect.apply(originalRequest, notification, args);
-              void Promise.resolve(result).then((value) => report("permission_request", permissionState(value), "notifications")).catch(() => report("permission_request", "other", "notifications"));
+              void Promise.resolve(result)
+                .then((value) =>
+                  report(
+                    "permission_request",
+                    permissionState(value),
+                    "notifications",
+                  ),
+                )
+                .catch(() =>
+                  report("permission_request", "other", "notifications"),
+                );
               return result;
             },
           });
         }
-      } catch { /* Permission instrumentation is best-effort. */ }
+      } catch {
+        /* Permission instrumentation is best-effort. */
+      }
       try {
         const geolocation = navigator.geolocation;
         for (const method of ["getCurrentPosition", "watchPosition"] as const) {
@@ -530,36 +746,88 @@ export class BrowserWorker {
           Object.defineProperty(geolocation, method, {
             configurable: true,
             writable: true,
-            value: function (success: PositionCallback, error?: PositionErrorCallback | null, options?: PositionOptions) {
+            value: function (
+              success: PositionCallback,
+              error?: PositionErrorCallback | null,
+              options?: PositionOptions,
+            ) {
               report("permission_request", "prompt", "geolocation");
-              const onSuccess: PositionCallback = (position) => { report("permission_request", "granted", "geolocation"); success(position); };
-              const onError: PositionErrorCallback = (reason) => { report("permission_request", reason.code === 1 ? "denied" : "other", "geolocation"); error?.(reason); };
-              return Reflect.apply(original, geolocation, [onSuccess, onError, options]);
+              const onSuccess: PositionCallback = (position) => {
+                report("permission_request", "granted", "geolocation");
+                success(position);
+              };
+              const onError: PositionErrorCallback = (reason) => {
+                report(
+                  "permission_request",
+                  reason.code === 1 ? "denied" : "other",
+                  "geolocation",
+                );
+                error?.(reason);
+              };
+              return Reflect.apply(original, geolocation, [
+                onSuccess,
+                onError,
+                options,
+              ]);
             },
           });
         }
-      } catch { /* Permission instrumentation is best-effort. */ }
+      } catch {
+        /* Permission instrumentation is best-effort. */
+      }
       try {
         const media = navigator.mediaDevices;
         const original = media?.getUserMedia;
-        if (original) Object.defineProperty(media, "getUserMedia", {
-          configurable: true,
-          writable: true,
-          value: function (constraints: MediaStreamConstraints) {
-            const requested = [constraints.audio ? "microphone" : undefined, constraints.video ? "camera" : undefined].filter((kind): kind is string => Boolean(kind));
-            requested.forEach((kind) => report("permission_request", "prompt", kind));
-            const result = Reflect.apply(original, media, [constraints]);
-            void Promise.resolve(result).then((stream) => { requested.forEach((kind) => report("permission_request", "granted", kind)); return stream; }, (error: unknown) => {
-              const denied = error instanceof DOMException && error.name === "NotAllowedError";
-              requested.forEach((kind) => report("permission_request", denied ? "denied" : "other", kind));
-              throw error;
-            });
-            return result;
-          },
-        });
-      } catch { /* Permission instrumentation is best-effort. */ }
-      const wrapPromisePermissionRequest = (target: unknown, method: string, permission: string) => {
-        if (!target || (typeof target !== "object" && typeof target !== "function")) return;
+        if (original)
+          Object.defineProperty(media, "getUserMedia", {
+            configurable: true,
+            writable: true,
+            value: function (constraints: MediaStreamConstraints) {
+              const requested = [
+                constraints.audio ? "microphone" : undefined,
+                constraints.video ? "camera" : undefined,
+              ].filter((kind): kind is string => Boolean(kind));
+              requested.forEach((kind) =>
+                report("permission_request", "prompt", kind),
+              );
+              const result = Reflect.apply(original, media, [constraints]);
+              void Promise.resolve(result).then(
+                (stream) => {
+                  requested.forEach((kind) =>
+                    report("permission_request", "granted", kind),
+                  );
+                  return stream;
+                },
+                (error: unknown) => {
+                  const denied =
+                    error instanceof DOMException &&
+                    error.name === "NotAllowedError";
+                  requested.forEach((kind) =>
+                    report(
+                      "permission_request",
+                      denied ? "denied" : "other",
+                      kind,
+                    ),
+                  );
+                  throw error;
+                },
+              );
+              return result;
+            },
+          });
+      } catch {
+        /* Permission instrumentation is best-effort. */
+      }
+      const wrapPromisePermissionRequest = (
+        target: unknown,
+        method: string,
+        permission: string,
+      ) => {
+        if (
+          !target ||
+          (typeof target !== "object" && typeof target !== "function")
+        )
+          return;
         const object = target as Record<string, unknown>;
         const original = object[method];
         if (typeof original !== "function") return;
@@ -570,38 +838,96 @@ export class BrowserWorker {
             value: function (this: unknown, ...args: unknown[]) {
               report("permission_request", "prompt", permission);
               let result: unknown;
-              try { result = Reflect.apply(original, this, args); }
-              catch (error) {
-                const denied = error instanceof DOMException && error.name === "NotAllowedError";
-                report("permission_request", denied ? "denied" : "other", permission);
+              try {
+                result = Reflect.apply(original, this, args);
+              } catch (error) {
+                const denied =
+                  error instanceof DOMException &&
+                  error.name === "NotAllowedError";
+                report(
+                  "permission_request",
+                  denied ? "denied" : "other",
+                  permission,
+                );
                 throw error;
               }
               void Promise.resolve(result).then(
                 () => report("permission_request", "granted", permission),
-                (error: unknown) => report("permission_request", error instanceof DOMException && error.name === "NotAllowedError" ? "denied" : "other", permission),
+                (error: unknown) =>
+                  report(
+                    "permission_request",
+                    error instanceof DOMException &&
+                      error.name === "NotAllowedError"
+                      ? "denied"
+                      : "other",
+                    permission,
+                  ),
               );
               return result;
             },
           });
-        } catch { /* The browser may expose a non-configurable method. */ }
+        } catch {
+          /* The browser may expose a non-configurable method. */
+        }
       };
       try {
-        const media = navigator.mediaDevices as MediaDevices & { getDisplayMedia?: (constraints?: DisplayMediaStreamOptions) => Promise<MediaStream> };
-        wrapPromisePermissionRequest(media, "getDisplayMedia", "window-management");
-      } catch { /* Display capture is optional. */ }
+        const media = navigator.mediaDevices as MediaDevices & {
+          getDisplayMedia?: (
+            constraints?: DisplayMediaStreamOptions,
+          ) => Promise<MediaStream>;
+        };
+        wrapPromisePermissionRequest(
+          media,
+          "getDisplayMedia",
+          "window-management",
+        );
+      } catch {
+        /* Display capture is optional. */
+      }
       try {
         const extendedNavigator = navigator as Navigator & {
-          usb?: unknown; serial?: unknown; bluetooth?: unknown; clipboard?: unknown;
+          usb?: unknown;
+          serial?: unknown;
+          bluetooth?: unknown;
+          clipboard?: unknown;
         };
-        wrapPromisePermissionRequest(extendedNavigator.usb, "requestDevice", "usb");
-        wrapPromisePermissionRequest(extendedNavigator.serial, "requestPort", "serial");
-        wrapPromisePermissionRequest(extendedNavigator.bluetooth, "requestDevice", "bluetooth");
-        wrapPromisePermissionRequest(extendedNavigator.clipboard, "read", "clipboard-read");
-        wrapPromisePermissionRequest(extendedNavigator.clipboard, "readText", "clipboard-read");
-      } catch { /* Optional browser APIs vary by context. */ }
+        wrapPromisePermissionRequest(
+          extendedNavigator.usb,
+          "requestDevice",
+          "usb",
+        );
+        wrapPromisePermissionRequest(
+          extendedNavigator.serial,
+          "requestPort",
+          "serial",
+        );
+        wrapPromisePermissionRequest(
+          extendedNavigator.bluetooth,
+          "requestDevice",
+          "bluetooth",
+        );
+        wrapPromisePermissionRequest(
+          extendedNavigator.clipboard,
+          "read",
+          "clipboard-read",
+        );
+        wrapPromisePermissionRequest(
+          extendedNavigator.clipboard,
+          "readText",
+          "clipboard-read",
+        );
+      } catch {
+        /* Optional browser APIs vary by context. */
+      }
       try {
-        wrapPromisePermissionRequest(Document.prototype, "requestStorageAccess", "persistent-storage");
-      } catch { /* Storage access API is optional. */ }
+        wrapPromisePermissionRequest(
+          Document.prototype,
+          "requestStorageAccess",
+          "persistent-storage",
+        );
+      } catch {
+        /* Storage access API is optional. */
+      }
     });
     const taskDeadline = setTimeout(
       () => {
@@ -619,18 +945,24 @@ export class BrowserWorker {
     let activeBrowserTabParentId = initialState?.browserTabParentId;
     let page = await context.newPage();
     setTabId(page, activeBrowserTabId, activeBrowserTabParentId);
+    this.currentPages.set(worker, page);
     let before: AppState | undefined;
     let element: UIElement | undefined;
     let edge: ActionEdge | undefined;
     const actionId = task.id;
     const attach = (p: Page) => {
+      trackPageRequests(p);
       p.on("dialog", (d) => {
         recordTabSignal(p, `dialog:${d.type()}`);
         recordTaskBrowserSignal(`browser_dialog:${d.type()}`);
         recordBrowserEvent({
           kind: "dialog",
           tabId: tabIdFor(p),
-          dialogType: d.type() as "alert" | "beforeunload" | "confirm" | "prompt",
+          dialogType: d.type() as
+            | "alert"
+            | "beforeunload"
+            | "confirm"
+            | "prompt",
           outcome: "dismissed",
         });
         void d.dismiss();
@@ -638,10 +970,16 @@ export class BrowserWorker {
       p.on("download", (d) => {
         recordTabSignal(p, "download");
         recordTaskBrowserSignal("download");
-        recordBrowserEvent({ kind: "download", tabId: tabIdFor(p), outcome: "started" });
+        recordBrowserEvent({
+          kind: "download",
+          tabId: tabIdFor(p),
+          outcome: "started",
+        });
         void d.cancel();
       });
-      p.on("close", () => recordBrowserEvent({ kind: "tab_closed", tabId: tabIdFor(p) }));
+      p.on("close", () =>
+        recordBrowserEvent({ kind: "tab_closed", tabId: tabIdFor(p) }),
+      );
       p.on("framenavigated", (frame) => {
         if (frame !== p.mainFrame()) return;
         try {
@@ -689,7 +1027,9 @@ export class BrowserWorker {
             method: safeMethod(request.method()),
             resourceType: request.resourceType().slice(0, 32),
           });
-        } catch { /* malformed or browser-internal URL */ }
+        } catch {
+          /* malformed or browser-internal URL */
+        }
         const apiCall = apiCallsByRequest.get(r.request());
         if (apiCall) {
           apiCall.status = r.status();
@@ -719,7 +1059,11 @@ export class BrowserWorker {
       });
       p.on("request", (req) => {
         try {
-          if (req.isNavigationRequest() || req.resourceType() === "xhr" || req.resourceType() === "fetch") {
+          if (
+            req.isNavigationRequest() ||
+            req.resourceType() === "xhr" ||
+            req.resourceType() === "fetch"
+          ) {
             recordBrowserEvent({
               kind: "network_request",
               tabId: tabIdFor(p),
@@ -728,7 +1072,9 @@ export class BrowserWorker {
               resourceType: req.resourceType().slice(0, 32),
             });
           }
-        } catch { /* malformed or browser-internal URL */ }
+        } catch {
+          /* malformed or browser-internal URL */
+        }
         const resourceType = req.resourceType();
         if (
           (resourceType !== "xhr" && resourceType !== "fetch") ||
@@ -758,7 +1104,11 @@ export class BrowserWorker {
       });
       p.on("requestfailed", (req) => {
         try {
-          if (req.isNavigationRequest() || req.resourceType() === "xhr" || req.resourceType() === "fetch") {
+          if (
+            req.isNavigationRequest() ||
+            req.resourceType() === "xhr" ||
+            req.resourceType() === "fetch"
+          ) {
             recordBrowserEvent({
               kind: "network_response",
               tabId: tabIdFor(p),
@@ -768,7 +1118,9 @@ export class BrowserWorker {
               failed: true,
             });
           }
-        } catch { /* malformed or browser-internal URL */ }
+        } catch {
+          /* malformed or browser-internal URL */
+        }
         const apiCall = apiCallsByRequest.get(req);
         if (apiCall) apiCall.failed = true;
       });
@@ -808,7 +1160,9 @@ export class BrowserWorker {
               origin: new URL(event.redirectResponse.url).origin,
               status: event.redirectResponse.status,
             });
-          } catch { /* malformed or browser-internal URL */ }
+          } catch {
+            /* malformed or browser-internal URL */
+          }
         });
         p.once("close", () => void cdp.detach().catch(() => {}));
       })().catch(() => {});
@@ -819,7 +1173,9 @@ export class BrowserWorker {
     context.on("page", async (p) => {
       const opener = await p.opener().catch(() => null);
       const parentTabId = opener ? tabIdFor(opener) : activeBrowserTabId;
-      const childTabId = acting ? popupTabIdFor(`${actionId}-${++actionPopupCount}`) : `tab-${++nextTabId}`;
+      const childTabId = acting
+        ? popupTabIdFor(`${actionId}-${++actionPopupCount}`)
+        : `tab-${++nextTabId}`;
       setTabId(p, childTabId, parentTabId);
       attach(p);
       recordBrowserEvent({
@@ -868,7 +1224,9 @@ export class BrowserWorker {
             resourceType: req.resourceType().slice(0, 32),
             failed: true,
           });
-        } catch { /* detached frame */ }
+        } catch {
+          /* detached frame */
+        }
         await route.abort("blockedbyclient");
         return;
       }
@@ -885,15 +1243,26 @@ export class BrowserWorker {
         await route.abort("blockedbyclient");
         return;
       }
-      if (
-        !["GET", "HEAD", "OPTIONS"].includes(req.method()) &&
-        !c.networkWriteAllowlist.some(
+      if (!["GET", "HEAD", "OPTIONS"].includes(req.method())) {
+        const blocked = c.networkWriteBlocklist.some(
           (a) => a.url === url && a.method === req.method(),
-        )
-      ) {
-        signals.push(`blocked_write:${req.method()}:${new URL(url).pathname}`);
-        await route.abort("blockedbyclient");
-        return;
+        );
+        const key = `${req.method()}:${new URL(url).pathname}`;
+        if (!loggedWrites.has(key)) {
+          loggedWrites.add(key);
+          this.store.event(
+            task.runId,
+            blocked ? "warn" : "info",
+            `${blocked ? "Blocked" : "Network write"}: ${key}${blocked ? " (in networkWriteBlocklist)" : ""}`,
+            worker,
+          );
+        }
+        if (blocked) {
+          signals.push(`blocked_write:${key}`);
+          await route.abort("blockedbyclient");
+          return;
+        }
+        signals.push(`network_write:${key}`);
       }
       if (req.isNavigationRequest()) await this.throttle(new URL(url).origin);
       if (this.metrics) this.metrics.requests++;
@@ -921,9 +1290,8 @@ export class BrowserWorker {
       if (!allowedUrl(recipe.seed, c) || riskyUrl(recipe.seed, c))
         throw new Error("POLICY: seed URL is blocked");
       await page.goto(recipe.seed, { waitUntil: "domcontentloaded" });
-      await stabilize(page, c.settleMs);
       for (const step of recipe.steps) {
-        const current = await observe(
+        const current = await settle(
           page,
           task.runId,
           { ...c, captureScreenshots: false },
@@ -940,9 +1308,11 @@ export class BrowserWorker {
         )
           throw new Error("RESTORE_POLICY: replay target no longer approved");
         const l = await resolveTarget(page, step.locators);
-        await this.act(l, step.action, step.valueKey);
-        await stabilize(page, c.settleMs);
-        const restored = await observe(
+        await this.act(l, step.action, step.valueKey, {
+          inputType: target.inputType,
+          accessibleName: target.accessibleName,
+        });
+        const restored = await settle(
           page,
           task.runId,
           { ...c, captureScreenshots: false },
@@ -955,7 +1325,7 @@ export class BrowserWorker {
             "RESTORE_MISMATCH: intermediate state did not match the verified recipe",
           );
       }
-      const pre = await observe(
+      let pre = await settle(
         page,
         task.runId,
         c,
@@ -973,10 +1343,51 @@ export class BrowserWorker {
       }
       before = source;
       if (!before) throw new Error("MISSING_STATE");
-      if (pre.state.fingerprint !== before.fingerprint)
-        throw new Error(
-          "RESTORE_MISMATCH: target state could not be reproduced",
+      if (recipe.steps.length > 1) {
+        // Multi-step recipes can depend on UI state a prior step opened
+        // (a dialog, a selected tab) that isn't reflected in the URL at
+        // all — only the full fingerprint can tell those apart, so it
+        // stays strict here.
+        if (pre.state.fingerprint !== before.fingerprint)
+          throw new Error(
+            "RESTORE_MISMATCH: target state could not be reproduced",
+          );
+      } else if (pre.state.url !== before.url) {
+        // 0-or-1-step recipes have nothing earlier in the sequence that
+        // needs preserving, so a mismatch here is unlikely to be
+        // meaningful UI state — more likely stray client-side noise
+        // (an open menu, scroll position, a toast). Reload straight to
+        // the recorded URL first; only fall back to the LLM if even that
+        // doesn't land where expected (e.g. a redirect).
+        await page.goto(before.url, { waitUntil: "domcontentloaded" });
+        pre = await settle(
+          page,
+          task.runId,
+          c,
+          recipe,
+          task.depth,
+          worker,
+          undefined,
+          activeBrowserTabId,
+          activeBrowserTabParentId,
         );
+        if (pre.state.url !== before.url) {
+          const recovered = await llmRecover(
+            page,
+            task.runId,
+            c,
+            recipe,
+            task.depth,
+            worker,
+            before.url,
+          );
+          if (!recovered)
+            throw new Error(
+              "RESTORE_MISMATCH: target URL could not be reproduced",
+            );
+          pre = recovered;
+        }
+      }
       element = this.store.get<UIElement>("elements", task.elementId!);
       if (!element) throw new Error("MISSING_ELEMENT");
       const policy = decide(element, before.url, c, task.action);
@@ -1031,10 +1442,14 @@ export class BrowserWorker {
       const target = await resolveTarget(page, element.locatorCandidates);
       browserEvents = [];
       browserActionStartedAt = Date.now();
-      browserBefore = await snapshotBrowserPage(page, context).catch(() => undefined);
+      browserBefore = await snapshotBrowserPage(page, context).catch(
+        () => undefined,
+      );
       acting = true;
-      await this.act(target, task.action, task.valueKey);
-      await stabilize(page, c.settleMs);
+      await this.act(target, task.action, task.valueKey, {
+        inputType: element.inputType,
+        accessibleName: element.accessibleName,
+      });
       if (popup) {
         await popup
           .waitForLoadState("domcontentloaded", { timeout: c.actionTimeoutMs })
@@ -1042,11 +1457,15 @@ export class BrowserWorker {
         if (allowedUrl(popup.url(), c)) {
           const previousTabId = tabIdFor(page);
           page = popup;
+          this.currentPages.set(worker, page);
           activeBrowserTabId = tabIdFor(popup);
           activeBrowserTabParentId = pageTabParents.get(popup) || previousTabId;
           recordTabSignal(popup, "popup_active");
-          recordBrowserEvent({ kind: "tab_activated", tabId: tabIdFor(popup), parentTabId: previousTabId });
-          await stabilize(page, c.settleMs);
+          recordBrowserEvent({
+            kind: "tab_activated",
+            tabId: tabIdFor(popup),
+            parentTabId: previousTabId,
+          });
         }
       }
       if (element.isSubmit) signals.push("submit_form");
@@ -1055,7 +1474,7 @@ export class BrowserWorker {
         seed: recipe.seed,
         steps: [...recipe.steps],
       };
-      const post = await observe(
+      const post = await settle(
         page,
         task.runId,
         c,
@@ -1066,13 +1485,27 @@ export class BrowserWorker {
         activeBrowserTabId,
         activeBrowserTabParentId,
       );
-      const browserAfter = await snapshotBrowserPage(page, context).catch(() => undefined);
-      const persistenceTriggered = browserEvents.some((event) =>
-        event.kind === "navigation_start" && (event.navigationType === "reload" || event.navigationType?.startsWith("history")) ||
-        event.kind === "navigation_request" && event.navigationReason === "reload",
-      ) || signals.some((signal) => /(?:^|:)history:(back|forward|go)(?::|$)/.test(signal));
+      const browserAfter = await snapshotBrowserPage(page, context).catch(
+        () => undefined,
+      );
+      const persistenceTriggered =
+        browserEvents.some(
+          (event) =>
+            (event.kind === "navigation_start" &&
+              (event.navigationType === "reload" ||
+                event.navigationType?.startsWith("history"))) ||
+            (event.kind === "navigation_request" &&
+              event.navigationReason === "reload"),
+        ) ||
+        signals.some((signal) =>
+          /(?:^|:)history:(back|forward|go)(?::|$)/.test(signal),
+        );
       const isolatedContextPersistence = persistenceTriggered
-        ? await probeIsolatedContextPersistence(this.browser, context, page.url())
+        ? await probeIsolatedContextPersistence(
+            this.browser,
+            context,
+            page.url(),
+          )
         : undefined;
       const step: RecipeStep = {
         elementSignature: element.structuralSignature,
@@ -1173,7 +1606,9 @@ export class BrowserWorker {
         edge.elapsedMs = Date.now() - started;
         edge.signals = [...new Set(signals)];
         if (browserBefore) {
-          const browserAfter = await snapshotBrowserPage(page, context).catch(() => undefined);
+          const browserAfter = await snapshotBrowserPage(page, context).catch(
+            () => undefined,
+          );
           if (browserAfter) {
             edge.browserEvidence = {
               version: 1,
@@ -1214,23 +1649,66 @@ export class BrowserWorker {
       throw new Error(message);
     } finally {
       clearTimeout(taskDeadline);
+      if (this.currentPages.get(worker) === page)
+        this.currentPages.delete(worker);
       if (traceStarted) await context.tracing.stop().catch(() => {});
       await context.close().catch(() => {});
     }
+  }
+  /** Best-effort screenshot of whatever page the given worker slot is currently driving. Returns undefined when the slot is idle, between tasks, or the capture fails (closed/navigating page). */
+  async screenshot(worker: number): Promise<Buffer | undefined> {
+    const page = this.currentPages.get(worker);
+    if (!page || page.isClosed()) return undefined;
+    return page
+      .screenshot({
+        type: "jpeg",
+        quality: 60,
+        timeout: 2000,
+        mask: this.config.redactSelectors.map((s) => page.locator(s)),
+      })
+      .catch(() => undefined);
   }
   private async act(
     target: Awaited<ReturnType<typeof resolveTarget>>,
     action: string,
     key?: string,
+    // Only needed to synthesize a fallback value when no explicit
+    // `ScanConfig.formValues` entry matches `key` — see synthesizeFormValue
+    // (packages/shared/src/index.ts) and policy.ts's `decide()`, which now
+    // always allows fill/select rather than requiring an explicit entry.
+    field?: { inputType?: string; accessibleName?: string },
   ) {
     if (action === "fill" || action === "select") {
       const v = this.config.formValues.find(
         (v) => `${v.route}:${v.label}` === key,
       );
-      if (!v) throw new Error("MISSING_SYNTHETIC_VALUE");
-      if (action === "select") await target.selectOption(v.value);
-      else await target.fill(v.value);
-    } else if (action === "hover") await target.hover();
-    else await target.click();
+      if (v) {
+        await performAction(target, action, v.value);
+        return;
+      }
+      if (action === "select") {
+        const optionValues = await target
+          .locator("option")
+          .evaluateAll((opts) =>
+            (opts as HTMLOptionElement[])
+              .map((o) => o.value)
+              .filter((val) => val !== ""),
+          )
+          .catch(() => [] as string[]);
+        // Skip index 0 when there's a real alternative — it's commonly an
+        // unselectable placeholder ("Choose one…") rather than a real option.
+        const chosen = optionValues[1] ?? optionValues[0];
+        if (chosen === undefined) throw new Error("MISSING_SYNTHETIC_VALUE");
+        await performAction(target, action, chosen);
+        return;
+      }
+      await performAction(
+        target,
+        action,
+        synthesizeFormValue(field?.inputType, field?.accessibleName),
+      );
+      return;
+    }
+    await performAction(target, action);
   }
 }

@@ -571,7 +571,53 @@
   color: #8492a1;
   font-size: 9px;
 }
-.flv-multitab-lineages{display:grid;gap:10px}.flv-multitab-lineages>article{padding:10px;border:1px solid #e2e8ef;border-radius:8px}.flv-multitab-lineages>article>header{display:flex;justify-content:space-between;gap:8px}.flv-multitab-lineages>article>header strong{color:#43566c;font-size:11px}.flv-multitab-lineages>article>header small{color:#8491a0;font-size:9px}.flv-multitab-lineages ol{display:grid;gap:5px;margin:8px 0 0;padding-left:18px}.flv-multitab-lineages li{display:flex;gap:8px;align-items:center}.flv-multitab-lineages li button{padding:5px 7px;border:1px solid #e9edf2;border-radius:6px;background:#fff;color:#52657b;font-size:9px;text-align:left}.flv-multitab-lineages li small{display:block;color:#8995a4;font-size:8px}
+.flv-multitab-lineages {
+  display: grid;
+  gap: 10px;
+}
+.flv-multitab-lineages > article {
+  padding: 10px;
+  border: 1px solid #e2e8ef;
+  border-radius: 8px;
+}
+.flv-multitab-lineages > article > header {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.flv-multitab-lineages > article > header strong {
+  color: #43566c;
+  font-size: 11px;
+}
+.flv-multitab-lineages > article > header small {
+  color: #8491a0;
+  font-size: 9px;
+}
+.flv-multitab-lineages ol {
+  display: grid;
+  gap: 5px;
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+.flv-multitab-lineages li {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.flv-multitab-lineages li button {
+  padding: 5px 7px;
+  border: 1px solid #e9edf2;
+  border-radius: 6px;
+  background: #fff;
+  color: #52657b;
+  font-size: 9px;
+  text-align: left;
+}
+.flv-multitab-lineages li small {
+  display: block;
+  color: #8995a4;
+  font-size: 8px;
+}
 .flv-responsive-state {
   margin-top: 10px;
   padding-top: 9px;
@@ -589,7 +635,61 @@
   font-size: 10px;
   font-weight: 600;
 }
-.flv-responsive-actions{display:grid;gap:8px;margin-top:9px;padding:11px;border:1px solid #e5eaf1;border-radius:9px;background:#fbfcfe}.flv-responsive-actions h4{margin:0;color:#45556b;font-size:11px}.flv-responsive-actions>p{margin:0;color:#78869a;font-size:10px}.flv-responsive-action-row{display:grid;grid-template-columns:minmax(150px,1fr) repeat(2,minmax(120px,1fr));gap:7px;align-items:start;padding:7px;border-top:1px solid #edf0f4}.flv-responsive-action-row>strong{font-size:10px;color:#4d5a6b}.flv-responsive-action-row>span{display:grid;gap:4px;color:#607087;font-size:9px}.flv-responsive-action-row small{color:#8290a2;font-size:8px}.flv-responsive-action-row em{font-style:normal}.flv-responsive-action-row em:first-of-type{color:#4c617b}@media(max-width:800px){.flv-responsive-action-row{grid-template-columns:1fr 1fr}.flv-responsive-action-row>strong{grid-column:1/-1}}
+.flv-responsive-actions {
+  display: grid;
+  gap: 8px;
+  margin-top: 9px;
+  padding: 11px;
+  border: 1px solid #e5eaf1;
+  border-radius: 9px;
+  background: #fbfcfe;
+}
+.flv-responsive-actions h4 {
+  margin: 0;
+  color: #45556b;
+  font-size: 11px;
+}
+.flv-responsive-actions > p {
+  margin: 0;
+  color: #78869a;
+  font-size: 10px;
+}
+.flv-responsive-action-row {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) repeat(2, minmax(120px, 1fr));
+  gap: 7px;
+  align-items: start;
+  padding: 7px;
+  border-top: 1px solid #edf0f4;
+}
+.flv-responsive-action-row > strong {
+  font-size: 10px;
+  color: #4d5a6b;
+}
+.flv-responsive-action-row > span {
+  display: grid;
+  gap: 4px;
+  color: #607087;
+  font-size: 9px;
+}
+.flv-responsive-action-row small {
+  color: #8290a2;
+  font-size: 8px;
+}
+.flv-responsive-action-row em {
+  font-style: normal;
+}
+.flv-responsive-action-row em:first-of-type {
+  color: #4c617b;
+}
+@media (max-width: 800px) {
+  .flv-responsive-action-row {
+    grid-template-columns: 1fr 1fr;
+  }
+  .flv-responsive-action-row > strong {
+    grid-column: 1/-1;
+  }
+}
 .flv-responsive-run-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr));
@@ -1034,7 +1134,7 @@
 }
 .flv-annotation-transfer button:disabled {
   cursor: not-allowed;
-  opacity: .55;
+  opacity: 0.55;
 }
 .flv-annotation-file {
   display: flex;
@@ -1669,7 +1769,575 @@
   border: 1px solid var(--border, #d8dee8);
   border-radius: 10px;
 }
-.flv-repeat-selector legend { padding: 0 6px; font-weight: 600; }
-.flv-repeat-selector label { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.flv-repeat-selector label span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.flv-repeat-selector label small { margin-left: auto; opacity: .7; white-space: nowrap; }
+.flv-repeat-selector legend {
+  padding: 0 6px;
+  font-weight: 600;
+}
+.flv-repeat-selector label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.flv-repeat-selector label span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.flv-repeat-selector label small {
+  margin-left: auto;
+  opacity: 0.7;
+  white-space: nowrap;
+}
+
+/* --- Dark theme overrides (auto-generated contrast fix) --- */
+
+:root[data-theme="dark"] .flv {
+  --flv-ink: var(--ink);
+  --flv-muted: var(--muted);
+  --flv-line: var(--line);
+  --flv-blue: var(--ink);
+}
+:root[data-theme="dark"] .flv-run-pair {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-run-pair svg {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-heading-count {
+  color: var(--ink);
+  background: var(--surface);
+}
+:root[data-theme="dark"] .flv-notice {
+  color: var(--ink);
+  background: var(--button-hover);
+}
+:root[data-theme="dark"] .flv-notice svg {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-notice.caution {
+  color: #edc679;
+  background: var(--surface);
+}
+:root[data-theme="dark"] .flv-notice.caution svg {
+  color: #edc679;
+}
+:root[data-theme="dark"] .flv-metric {
+  background: var(--surface);
+}
+:root[data-theme="dark"] .flv-metric strong {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-metric small {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-impact-path-list > li > strong {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-impact-signature {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-impact-fragment {
+  color: var(--ink);
+  background: var(--surface);
+  border-color: var(--line);
+}
+:root[data-theme="dark"] .flv-impact-fragment > b {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-impact-fragment svg {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-impact-more {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-list-panel {
+  background: var(--surface);
+}
+:root[data-theme="dark"] .flv-auth-summary > span {
+  background: var(--surface);
+}
+:root[data-theme="dark"] .flv-auth-status {
+  color: #ffaaa1;
+  background: var(--surface);
+  border-color: var(--line);
+}
+:root[data-theme="dark"] .flv-auth-links button {
+  background: var(--surface);
+}
+:root[data-theme="dark"] .flv-auth-links button:hover {
+  background: var(--surface);
+}
+:root[data-theme="dark"] .flv-table-wrap h3 {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-record-list li > button {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-record-list li > button:hover {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-record-list small {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-empty-inline {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-table-wrap {
+  background: var(--surface);
+}
+:root[data-theme="dark"] .flv-table thead th {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-table tbody th {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-table td {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-table td.negative {
+  color: #ffaaa1;
+}
+:root[data-theme="dark"] .flv-table td.positive {
+  color: #8bd9bb;
+}
+:root[data-theme="dark"] .flv-footnote {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-prerequisite {
+  color: var(--ink);
+  background: var(--surface);
+  border-color: var(--line);
+}
+:root[data-theme="dark"] .flv-prerequisite svg {
+  color: #edc679;
+}
+:root[data-theme="dark"] .flv-prerequisite strong {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-empty {
+  color: var(--ink);
+  background: var(--surface);
+  border-color: var(--line);
+}
+:root[data-theme="dark"] .flv-pixel-diff {
+  background: var(--surface);
+}
+:root[data-theme="dark"] .flv-pixel-diff h3 {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-pixel-diff > header p {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-pixel-diff > header button {
+  color: var(--ink);
+  background: var(--surface);
+  border-color: var(--line);
+}
+:root[data-theme="dark"] .flv-pixel-controls label {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-pixel-controls label > span {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-pixel-controls select {
+  color: var(--ink);
+  background: var(--surface);
+  border-color: var(--line);
+}
+:root[data-theme="dark"] .flv-pixel-status {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-pixel-result strong {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-pixel-result small {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-pixel-result img {
+  background: var(--surface);
+  border-color: var(--line);
+}
+:root[data-theme="dark"] .flv-responsive-route {
+  background: var(--surface);
+}
+:root[data-theme="dark"] .flv-responsive-route > header h3 {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-responsive-capture > small {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-multitab-lineages > article {
+  border-color: var(--line);
+}
+:root[data-theme="dark"] .flv-multitab-lineages > article > header strong {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-multitab-lineages > article > header small {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-multitab-lineages li button {
+  color: var(--ink);
+  background: var(--surface);
+  border-color: var(--line);
+}
+:root[data-theme="dark"] .flv-multitab-lineages li small {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-responsive-state-title strong {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-responsive-actions {
+  background: var(--surface);
+  border-color: var(--line);
+}
+:root[data-theme="dark"] .flv-responsive-actions h4 {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-responsive-actions > p {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-responsive-action-row > strong {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-responsive-action-row > span {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-responsive-action-row small {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-responsive-action-row em:first-of-type {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-responsive-run {
+  background: var(--surface);
+  border-color: var(--line);
+}
+:root[data-theme="dark"] .flv-responsive-run > header strong {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-responsive-capture img {
+  background: var(--surface);
+  border-color: var(--line);
+}
+:root[data-theme="dark"] .flv-responsive-missing {
+  color: var(--ink);
+  border-color: var(--line);
+}
+:root[data-theme="dark"] .flv-responsive-geometry span {
+  color: var(--ink);
+  background: var(--surface);
+  border-color: var(--line);
+}
+:root[data-theme="dark"] .flv-snapshot {
+  background: var(--surface);
+}
+:root[data-theme="dark"] .flv-snapshot > header strong {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-snapshot > small {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-snapshot-image {
+  background: var(--button-hover);
+}
+:root[data-theme="dark"] .flv-snapshot-image > span {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-snapshot h3 {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-snapshot > a {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-snapshot > p {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-request-group {
+  background: var(--surface);
+}
+:root[data-theme="dark"] .flv-request-group > header strong {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-request-group > header small {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-request-group > header > span {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-text-link {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-sequence {
+  color: var(--ink);
+  background: var(--button-hover);
+}
+:root[data-theme="dark"] .flv-request-line > strong {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-request-line code {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-request-line > span {
+  color: #8bd9bb;
+}
+:root[data-theme="dark"] .flv-request-line > span.failed {
+  color: #ffaaa1;
+}
+:root[data-theme="dark"] .flv-request-line > time {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-request-endpoints button {
+  color: var(--ink);
+  background: var(--surface);
+  border-color: var(--line);
+}
+:root[data-theme="dark"] .flv-fresh-grid article {
+  background: var(--surface);
+}
+:root[data-theme="dark"] .flv-fresh-grid article > span {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-fresh-grid article > strong {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-fresh-grid small {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-fresh-grid button {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-note-editor {
+  background: var(--surface);
+}
+:root[data-theme="dark"] .flv-annotation-actions label {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-annotation-actions select {
+  color: var(--ink);
+  background: var(--surface);
+  border-color: var(--line);
+}
+:root[data-theme="dark"] .flv-annotation-list article {
+  background: var(--surface);
+}
+:root[data-theme="dark"] .flv-annotation-list article > header > time {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-annotation-list article > header button {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-annotation-list article > p {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-review-status {
+  color: var(--ink);
+  background: var(--surface);
+}
+:root[data-theme="dark"] .flv-review-status.reviewing {
+  color: var(--ink);
+  background: var(--button-hover);
+}
+:root[data-theme="dark"] .flv-review-status.resolved {
+  color: #8bd9bb;
+  background: var(--button-hover);
+}
+:root[data-theme="dark"] .flv-annotation-transfer {
+  background: var(--surface);
+}
+:root[data-theme="dark"] .flv-annotation-file {
+  background: var(--surface);
+}
+:root[data-theme="dark"] .flv-annotation-file:hover {
+  background: var(--surface);
+}
+:root[data-theme="dark"] .flv-annotation-transfer select {
+  background: var(--surface);
+}
+:root[data-theme="dark"] .flv-annotation-actions > button {
+  color: #ffaaa1;
+}
+:root[data-theme="dark"] .flv-live-state {
+  color: var(--ink);
+  border-color: var(--line);
+}
+:root[data-theme="dark"] .flv-live-state.active {
+  color: #8bd9bb;
+  background: var(--surface);
+  border-color: var(--line);
+}
+:root[data-theme="dark"] .flv-worker-pulse strong {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-worker-pulse span {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-recurrence-list article {
+  background: var(--surface);
+}
+:root[data-theme="dark"] .flv-recurrence-list article > header strong {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-recurrence-list article > header code {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-recurrence-list li button {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-recurrence-list li small {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-th-sub {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-hub-bar {
+  background: var(--surface);
+}
+:root[data-theme="dark"] .flv-hub-bar label {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-hub-bar select {
+  color: var(--ink);
+  background: var(--surface);
+  border-color: var(--line);
+}
+:root[data-theme="dark"] .flv-target-picker {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-target-picker select {
+  color: var(--ink);
+  background: var(--surface);
+  border-color: var(--line);
+}
+:root[data-theme="dark"] .flv-refresh {
+  color: var(--ink);
+  background: var(--surface);
+}
+:root[data-theme="dark"] .flv-edit-note {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-edit-note textarea {
+  color: var(--ink);
+  border-color: var(--line);
+}
+:root[data-theme="dark"] .flv-journey-index {
+  color: var(--ink);
+  background: var(--surface);
+  border-color: var(--line);
+}
+:root[data-theme="dark"] .flv-journey-step {
+  background: var(--surface);
+}
+:root[data-theme="dark"] .flv-journey-action > button {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-journey-action > button small {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-time-bars {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-time-bars > i {
+  background: var(--button-hover);
+}
+:root[data-theme="dark"] .flv-api-timing-list {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-path-start {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-provenance-list article {
+  background: var(--surface);
+}
+:root[data-theme="dark"] .flv-provenance-type {
+  color: #8bd9bb;
+  background: var(--surface);
+  border-color: var(--line);
+}
+:root[data-theme="dark"] .flv-provenance-type.unknown {
+  color: #edc679;
+  background: var(--surface);
+  border-color: var(--line);
+}
+:root[data-theme="dark"] .flv-provenance-chain button {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-provenance-chain > span {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-provenance-chain svg {
+  color: var(--muted);
+}
+:root[data-theme="dark"] .flv-provenance-list article > small {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-consistency-section h3 {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-consistency-section p {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-consistency-route-list strong {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-consistency-route-list span {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-consistency-route-list small {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-history-events li {
+  background: var(--surface);
+}
+:root[data-theme="dark"] .flv-history-events time {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-history-kind {
+  color: var(--ink);
+  background: var(--button-hover);
+}
+:root[data-theme="dark"] .flv-history-events > li > span:nth-child(3) {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-history-events button {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-history-events button small {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-multitab-list article {
+  background: var(--surface);
+}
+:root[data-theme="dark"] .flv-multitab-list article > header {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-multitab-list article > header time {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-multitab-handoff > svg {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-tab-chip {
+  color: var(--ink);
+  background: var(--surface);
+  border-color: var(--line);
+}
+:root[data-theme="dark"] .flv-tab-chip.popup_active {
+  color: #8bd9bb;
+  background: var(--surface);
+  border-color: var(--line);
+}
+:root[data-theme="dark"] .flv-tab-chip.popup_opened {
+  color: var(--ink);
+  background: var(--surface);
+  border-color: var(--line);
+}
+:root[data-theme="dark"] .flv-multitab-list article > small {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-multitab-list article > button {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flv-repeat-selector {
+  border-color: var(--line);
+}

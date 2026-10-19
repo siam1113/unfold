@@ -1123,3 +1123,332 @@
     animation: none;
   }
 }
+
+/* --- Dark theme overrides (auto-generated contrast fix) --- */
+
+:root[data-theme="dark"] .flow-coverage-view {
+  --fvc-ink: var(--ink);
+  --fvc-muted: var(--muted);
+  --fvc-border: var(--line);
+  --fvc-surface: var(--surface);
+}
+:root[data-theme="dark"] .flow-recording-view {
+  --fvc-ink: var(--ink);
+  --fvc-muted: var(--muted);
+  --fvc-border: var(--line);
+  --fvc-surface: var(--surface);
+}
+:root[data-theme="dark"] .flow-recording-picker {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flow-recording-picker select {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flow-recording-progress button {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flow-recording-progress button.active {
+  color: var(--ink);
+  background: var(--surface);
+  border-color: var(--line);
+}
+:root[data-theme="dark"] .flow-recording-progress button > span {
+  background: var(--surface);
+  border-color: var(--line);
+}
+:root[data-theme="dark"] .flow-recording-frame-heading {
+  background: var(--surface);
+}
+:root[data-theme="dark"] .flow-recording-frame-heading > div > span {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flow-recording-frame-heading strong {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flow-recording-step-count {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flow-recording-screen {
+  background: var(--button-hover);
+}
+:root[data-theme="dark"] .flow-recording-image-wrap {
+  background: var(--surface);
+  border-color: var(--line);
+}
+:root[data-theme="dark"] .flow-recording-highlight {
+  background: var(--button-hover);
+}
+:root[data-theme="dark"] .flow-recording-empty {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flow-recording-empty strong {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flow-recording-action-copy > span {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flow-recording-action-copy > strong {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flow-recording-action-copy > small {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flow-recording-controls button {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flow-recording-disclaimer {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flow-coverage-eyebrow {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flow-story-picker {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flow-story-picker select {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flow-story-notice {
+  color: var(--ink);
+  background: var(--surface);
+  border-color: var(--line);
+}
+:root[data-theme="dark"] .flow-story-notice strong {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flow-story-notice.is-incomplete {
+  background: var(--surface);
+}
+:root[data-theme="dark"] .flow-story-notice.is-incomplete strong {
+  color: #edc679;
+}
+:root[data-theme="dark"] .flow-story-step:not(:last-child)::before {
+  background: var(--button-hover);
+}
+:root[data-theme="dark"] .flow-story-step-index {
+  color: var(--ink);
+  background: var(--surface);
+  border-color: var(--line);
+}
+:root[data-theme="dark"] .flow-story-state-head {
+  background: var(--surface);
+}
+:root[data-theme="dark"] .flow-story-state-head time {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flow-story-state-link span {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flow-story-state-link strong {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flow-story-screenshot {
+  background: var(--surface);
+}
+:root[data-theme="dark"] .flow-story-screenshot a {
+  background: var(--surface);
+  border-color: var(--line);
+}
+:root[data-theme="dark"] .flow-story-no-screenshot {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flow-story-trigger-label {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flow-story-outcome.is-executed {
+  color: #8bd9bb;
+  background: var(--button-hover);
+}
+:root[data-theme="dark"] .flow-story-outcome.is-failed {
+  color: #ffaaa1;
+  background: var(--button-hover);
+}
+:root[data-theme="dark"] .flow-story-outcome.is-skipped_policy {
+  color: #edc679;
+  background: var(--surface);
+}
+:root[data-theme="dark"] .flow-story-action-link {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flow-story-action-link small {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flow-story-policy {
+  color: #ffaaa1;
+  background: var(--surface);
+}
+:root[data-theme="dark"] .flow-story-evidence-group > strong {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flow-story-evidence-group > a {
+  color: var(--ink);
+  border-color: var(--line);
+}
+:root[data-theme="dark"] .flow-story-evidence-group > a:hover {
+  background: var(--surface);
+}
+:root[data-theme="dark"] .flow-story-api {
+  background: var(--surface);
+  border-color: var(--line);
+}
+:root[data-theme="dark"] .flow-story-api > span {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flow-story-api small {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flow-story-api.is-failed {
+  background: var(--surface);
+  border-color: var(--line);
+}
+:root[data-theme="dark"] .flow-story-api.is-failed > span {
+  color: #ffaaa1;
+}
+:root[data-theme="dark"] .flow-story-muted {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flow-story-destination {
+  color: var(--ink);
+  background: var(--surface);
+}
+:root[data-theme="dark"] .flow-story-recipe {
+  background: var(--surface);
+}
+:root[data-theme="dark"] .flow-story-recipe h3 {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flow-story-recipe > p {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flow-story-recipe li {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flow-story-recipe li small {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flow-story-recipe-verification {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flow-coverage-empty {
+  background: var(--surface);
+  border-color: var(--line);
+}
+:root[data-theme="dark"] .flow-coverage-empty strong {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flow-coverage-empty p {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flow-coverage-search input {
+  color: var(--ink);
+  background: var(--surface);
+}
+:root[data-theme="dark"] .flow-coverage-note {
+  color: var(--ink);
+  background: var(--surface);
+  border-color: var(--line);
+}
+:root[data-theme="dark"] .flow-coverage-summary > div {
+  background: var(--surface);
+}
+:root[data-theme="dark"] .flow-coverage-summary strong {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flow-coverage-summary span {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flow-coverage-summary .is-executed strong {
+  color: #8bd9bb;
+}
+:root[data-theme="dark"] .flow-coverage-summary .is-failed strong {
+  color: #ffaaa1;
+}
+:root[data-theme="dark"] .flow-coverage-summary .is-skipped strong {
+  color: #edc679;
+}
+:root[data-theme="dark"] .flow-coverage-route {
+  background: var(--surface);
+}
+:root[data-theme="dark"] .flow-coverage-route-toggle {
+  background: var(--surface);
+}
+:root[data-theme="dark"] .flow-coverage-route-toggle:hover {
+  background: var(--surface);
+}
+:root[data-theme="dark"] .flow-coverage-route-title strong {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flow-coverage-route-title small {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flow-coverage-route-counts i {
+  color: var(--ink);
+  background: var(--button-hover);
+}
+:root[data-theme="dark"] .flow-coverage-route-counts .is-executed {
+  color: #8bd9bb;
+  background: var(--button-hover);
+}
+:root[data-theme="dark"] .flow-coverage-route-counts .is-failed {
+  color: #ffaaa1;
+  background: var(--button-hover);
+}
+:root[data-theme="dark"] .flow-coverage-route-counts .is-skipped {
+  color: #edc679;
+  background: var(--surface);
+}
+:root[data-theme="dark"] .flow-coverage-chevron {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flow-coverage-state {
+  border-color: var(--line);
+}
+:root[data-theme="dark"] .flow-coverage-state > header {
+  background: var(--surface);
+}
+:root[data-theme="dark"] .flow-coverage-state-select strong {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flow-coverage-state-select small {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flow-coverage-status {
+  color: var(--ink);
+  background: var(--button-hover);
+}
+:root[data-theme="dark"] .flow-coverage-status.is-executed {
+  color: #8bd9bb;
+  background: var(--button-hover);
+}
+:root[data-theme="dark"] .flow-coverage-status.is-failed {
+  color: #ffaaa1;
+  background: var(--button-hover);
+}
+:root[data-theme="dark"] .flow-coverage-status.is-skipped_policy {
+  color: #edc679;
+  background: var(--surface);
+}
+:root[data-theme="dark"] .flow-coverage-status.is-no_action {
+  color: var(--ink);
+  background: var(--button-hover);
+}
+:root[data-theme="dark"] .flow-coverage-control-label small {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flow-coverage-control-label strong {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flow-coverage-action {
+  color: var(--ink);
+  background: var(--surface);
+  border-color: var(--line);
+}
+:root[data-theme="dark"] .flow-coverage-action:hover {
+  background: var(--surface);
+}
+:root[data-theme="dark"] .flow-coverage-action > small {
+  color: #ffaaa1;
+}
+:root[data-theme="dark"] .flow-coverage-no-controls {
+  color: var(--ink);
+}

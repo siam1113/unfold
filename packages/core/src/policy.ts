@@ -6,11 +6,20 @@ import type {
 export function allowedUrl(raw: string, c: ScanConfig): boolean {
   try {
     const u = new URL(raw);
+    // An empty allowedOrigins is "no restriction configured", not "same
+    // origin only" — plenty of real apps render using scripts/styles/fonts
+    // from third-party CDNs (e.g. Angular's zone.js), and blocking those by
+    // default breaks the target app's own bootstrap rather than scoping the
+    // crawl. Origin scoping only kicks in once a project explicitly lists
+    // origins to restrict to.
+    const inScope =
+      c.allowedOrigins.length === 0 ||
+      [new URL(c.baseUrl).origin, ...c.allowedOrigins].includes(u.origin);
     return (
       ["http:", "https:"].includes(u.protocol) &&
       !u.username &&
       !u.password &&
-      [new URL(c.baseUrl).origin, ...c.allowedOrigins].includes(u.origin) &&
+      inScope &&
       !c.denyUrlPatterns.some((p) => u.href.includes(p)) &&
       (!c.allowUrlPatterns.length ||
         c.allowUrlPatterns.some((p) => u.href.includes(p)))
@@ -56,11 +65,18 @@ export function decide(
   const submitApproved = config.formSubmitAllowlist.some(
     (a) => a.route === route && a.name === name,
   );
-  if (element.isSubmit && !submitApproved)
+  // Submitting a form is where real side effects live (emails sent, records
+  // created, real writes on the live target), so it stays gated behind an
+  // exact allowlist entry — UNLESS the project has explicitly turned
+  // safeMode off, the same single toggle users already use to say "this run
+  // may cause real writes." safeMode is Unfold's own crawl-time policy knob,
+  // distinct from `dryRun` (inventory-only) and `approved`/`submitApproved`
+  // (explicit per-control opt-in) above.
+  if (element.isSubmit && !submitApproved && config.safeMode)
     return result(
       false,
       "form-submit",
-      "Form submission requires an exact route and control allowlist entry",
+      "Form submission requires an exact route and control allowlist entry (or disabling safeMode)",
     );
   if (
     config.denyActionKeywords.some((k) =>
@@ -82,12 +98,20 @@ export function decide(
       "dry-run",
       "Dry run: action inventoried without activation",
     );
+  // Typing into a field is non-destructive on its own (nothing is sent
+  // anywhere until some later submit action, which has its own gate above) —
+  // always allowed, using the project's own configured value for this exact
+  // route+label when one exists, or an obviously-synthetic auto-generated
+  // one otherwise (packages/shared/src/index.ts's synthesizeFormValue,
+  // applied in packages/worker/src/index.ts's act()).
   if (action === "fill" || action === "select")
-    return result(
-      config.formValues.some((v) => v.route === route && v.label === name),
-      "synthetic-value",
-      "Only configured synthetic field values may be filled",
-    );
+    return config.formValues.some((v) => v.route === route && v.label === name)
+      ? result(true, "synthetic-value", "Configured synthetic field value")
+      : result(
+          true,
+          "auto-synthetic-value",
+          "Auto-synthesized field value (no explicit override configured)",
+        );
   if (approved || submitApproved)
     return result(
       true,

@@ -9,6 +9,53 @@ const httpUrl = z
       !new URL(v).password,
     "Use an HTTP(S) URL without credentials",
   );
+// Shared step vocabulary for both the Automation tab's named workflows
+// (packages/worker/src/workflow-runner.ts) and ConfigSchema.setupSteps
+// below — a sequence of browser actions run once, before any discovery
+// worker starts probing, to get past things a storage-state file alone
+// can't (consent banners, workspace pickers, multi-field logins).
+export const WorkflowStepSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("navigate"),
+    url: z.string(),
+    description: z.string().max(300).optional(),
+  }),
+  z.object({
+    type: z.literal("click"),
+    selector: z.string(),
+    description: z.string().max(300).optional(),
+  }),
+  z.object({
+    type: z.literal("fill"),
+    selector: z.string(),
+    value: z.string(),
+    description: z.string().max(300).optional(),
+  }),
+  z.object({
+    type: z.literal("waitFor"),
+    selector: z.string().optional(),
+    /** Wait for this text to appear anywhere on the page (page.getByText),
+     * as an alternative to a selector — useful when there's no stable
+     * selector for a success/arrival state. */
+    text: z.string().optional(),
+    ms: z.number().int().positive().max(60000).optional(),
+    description: z.string().max(300).optional(),
+  }),
+  z.object({
+    type: z.literal("assertText"),
+    selector: z.string(),
+    expected: z.string(),
+    description: z.string().max(300).optional(),
+  }),
+  z.object({
+    type: z.literal("apiCall"),
+    method: z.enum(["GET", "POST", "PUT", "PATCH", "DELETE"]),
+    url: z.string(),
+    expectedStatus: z.number().int().optional(),
+    description: z.string().max(300).optional(),
+  }),
+]);
+export type WorkflowStep = z.infer<typeof WorkflowStepSchema>;
 export const ConfigSchema = z
   .object({
     name: z.string().min(1).max(100).default("Application discovery"),
@@ -25,11 +72,20 @@ export const ConfigSchema = z
       )
       .default([]),
     authStatePath: z.string().optional(),
+    // Runs once, sequentially, before any discovery worker begins probing —
+    // see packages/core/src/index.ts's Coordinator.start(). The resulting
+    // context's storageState() becomes (or extends) authStatePath, so its
+    // effect (cookies, localStorage) reaches every subsequent worker
+    // context the same way a manually captured login session does.
+    setupSteps: z.array(WorkflowStepSchema).max(20).default([]),
     concurrency: z.number().int().min(1).max(16).default(4),
     maxDepth: z.number().int().min(0).max(20).default(6),
     maxStates: z.number().int().min(1).max(10000).default(250),
     maxActions: z.number().int().min(1).max(50000).default(1500),
-    maxDurationMinutes: z.number().positive().max(240).default(15),
+    // 360 (6h) accommodates the "thorough" exploration tier's larger
+    // action/state budget without the clock being the thing that cuts a
+    // run short before its own budget does.
+    maxDurationMinutes: z.number().positive().max(360).default(15),
     actionTimeoutMs: z.number().int().min(500).max(60000).default(10000),
     settleMs: z.number().int().min(50).max(3000).default(250),
     navigationIntervalMs: z.number().int().min(0).max(60000).default(100),
@@ -52,7 +108,14 @@ export const ConfigSchema = z
         }),
       )
       .default([]),
-    networkWriteAllowlist: z
+    // Network writes are allowed by default — the same policy as origins:
+    // apps legitimately fetch read-only data (menus, permissions, search
+    // results) over POST, and a default-block made that indistinguishable
+    // from a real mutation, breaking rendering. Every write request is
+    // still surfaced as a run event (see worker/src/index.ts) so a user can
+    // see exactly what fired and, if they want, add it here to block it on
+    // future runs.
+    networkWriteBlocklist: z
       .array(
         z.object({
           url: httpUrl,
@@ -96,6 +159,7 @@ export const ConfigSchema = z
       ]),
     captureScreenshots: z.boolean().default(true),
     captureTracesOnFailure: z.boolean().default(true),
+    streamWorkers: z.boolean().default(false),
     viewport: z
       .object({
         width: z.number().int().min(320).max(2560),
@@ -595,6 +659,9 @@ export const ProjectSchema = z.object({
   baseUrl: httpUrl,
   scanConfig: ConfigSchema,
   agentInstructions: z.string().max(12000),
+  // AppMCP's per-connection browser (packages/mcp/src/app-server.ts): run it
+  // headed instead of headless, for local debugging.
+  appMcpHeaded: z.boolean().default(false),
   createdAt: z.string(),
   updatedAt: z.string(),
   archivedAt: z.string().optional(),
@@ -676,15 +743,254 @@ export function publicConfig(config: ScanConfig): ScanConfig {
         u.searchParams.set(key, "[redacted]");
     return u.href;
   };
+  // Run configs are stored as raw JSON and read back without re-validation
+  // (unlike project configs, which go through ConfigSchema.parse() on every
+  // read — see Store.project()), so a run saved before a field existed
+  // simply won't have it. Guard every array field here instead of trusting
+  // the ScanConfig type, or an old run crashes this on read.
   return {
     ...config,
     baseUrl: cleanUrl(config.baseUrl),
-    seeds: config.seeds.map(cleanUrl),
-    networkWriteAllowlist: config.networkWriteAllowlist.map((e) => ({
+    seeds: (config.seeds || []).map(cleanUrl),
+    networkWriteBlocklist: (config.networkWriteBlocklist || []).map((e) => ({
       ...e,
       url: cleanUrl(e.url),
     })),
     authStatePath: config.authStatePath ? "[local session]" : undefined,
-    formValues: config.formValues.map((v) => ({ ...v, value: "[redacted]" })),
+    formValues: (config.formValues || []).map((v) => ({
+      ...v,
+      value: "[redacted]",
+    })),
   };
 }
+
+/**
+ * A plausible, obviously-synthetic value for a form field discovery never
+ * had an explicit `ScanConfig.formValues` entry for — used so a fillable
+ * field actually gets filled (and a fillable `<select>` gets a real option
+ * picked) during a crawl by default, rather than every field going unfilled
+ * until a human configures one. Heuristic only: checks `inputType` first,
+ * then falls back to keyword-matching the field's own accessible
+ * name/label — good enough to get past client-side format validation
+ * (email/url/tel/number patterns), not an attempt to guess real-looking
+ * data. Never used for a `<select>` (packages/worker/src/index.ts picks a
+ * real `<option>` value for those instead, since an arbitrary string won't
+ * match any option).
+ */
+export function synthesizeFormValue(
+  inputType: string | undefined,
+  label: string | undefined,
+): string {
+  const type = (inputType || "").toLowerCase();
+  const name = (label || "").toLowerCase();
+  if (type === "email" || /e-?mail/.test(name))
+    return "unfold-discovery@example.com";
+  if (type === "password" || /password/.test(name)) return "Unfold-Test-1!";
+  if (type === "tel" || /phone|mobile/.test(name)) return "+15555550123";
+  if (type === "url" || /url|website|link/.test(name))
+    return "https://example.com";
+  if (type === "number" || /number|quantity|qty|amount|zip|postal/.test(name))
+    return "1";
+  if (type === "date") return new Date().toISOString().slice(0, 10);
+  if (type === "search" || /search|query|keyword|filter/.test(name))
+    return "test";
+  if (/name/.test(name)) return "Unfold Tester";
+  return "Unfold test value";
+}
+
+// AI Browse: a live session either connected (via Playwright's
+// connectOverCDP) to the user's own local Chrome, or launched fresh as a
+// throwaway isolated browser the server owns outright — driven by an LLM
+// tool-calling agent loop either way. See apps/server/src/browse-session.ts
+// for the session manager and packages/mcp/src/browse-tools.ts for the
+// tools the agent calls. The two modes have different, deliberately
+// asymmetric teardown rules (browse-session.ts): "connect" must never call
+// browser.close()/context.close() (it isn't ours to close), while "launch"
+// must, since the server owns that browser exclusively and nothing else is
+// keeping it running.
+export const BrowseSessionSchema = z.object({
+  id: z.string(),
+  projectId: z.string(),
+  ownerId: z.string(),
+  mode: z.enum(["connect", "launch"]),
+  /** Only meaningful for mode "connect" — the CDP endpoint the user supplied. */
+  cdpEndpoint: z.string().optional(),
+  status: z.enum(["connecting", "live", "closed", "failed"]),
+  createdAt: z.string(),
+  closedAt: z.string().optional(),
+  lastError: z.string().optional(),
+});
+export type BrowseSession = z.infer<typeof BrowseSessionSchema>;
+
+// One entry in a browse session's live transcript: a tool call the agent
+// made, a chat message, a console log line, or a network request/response
+// observed on the attached page. Unlike discovery's ApiCall/BrowserEvent
+// evidence, this is captured unredacted — it's the user inspecting their own
+// live session, not evidence collected for storage/sharing.
+export const BrowseEventSchema = z.object({
+  id: z.string(),
+  sessionId: z.string(),
+  sequence: z.number().int().nonnegative(),
+  time: z.string(),
+  kind: z.enum([
+    "agent_tool",
+    "agent_message",
+    "console",
+    "network_request",
+    "network_response",
+    "status",
+  ]),
+  payload: z.record(z.string(), z.unknown()),
+});
+export type BrowseEvent = z.infer<typeof BrowseEventSchema>;
+
+// A captured login session for a project: a human logs into the target app
+// in a fresh, isolated, visible browser window (apps/server/src/auth-capture.ts
+// — deliberately NOT AI Browse's "connect" mode, which would export every
+// cookie in the user's real Chrome profile, nor its "launch" mode, which is
+// headless and would require typing a password into the chat box), then the
+// resulting Playwright storageState() is saved to disk and its path can be
+// set as a discovery run's ScanConfig.authStatePath.
+export const AuthCaptureSchema = z.object({
+  id: z.string(),
+  projectId: z.string(),
+  ownerId: z.string(),
+  baseUrl: z.string(),
+  status: z.enum(["open", "captured", "cancelled", "failed"]),
+  /** Only set once status is "captured" — path to the storage-state JSON file. */
+  path: z.string().optional(),
+  cookieCount: z.number().int().nonnegative().optional(),
+  domains: z.array(z.string()).optional(),
+  createdAt: z.string(),
+  capturedAt: z.string().optional(),
+  lastError: z.string().optional(),
+});
+export type AuthCapture = z.infer<typeof AuthCaptureSchema>;
+
+// Automation: the Workflow tab (a named sequence of steps + an expected
+// outcome, run against the project's app) and the Framework tab (a real
+// Cypress/Playwright project edited in-browser and executed server-side).
+// See apps/server/src/automation-workflows.ts, automation-framework.ts, and
+// packages/worker/src/workflow-runner.ts. WorkflowStepSchema itself now
+// lives near the top of this file (before ConfigSchema), since
+// ConfigSchema.setupSteps reuses it directly.
+export const AutomationWorkflowSchema = z.object({
+  id: z.string(),
+  projectId: z.string(),
+  ownerId: z.string(),
+  name: z.string().min(1).max(120),
+  description: z.string().max(2000).optional(),
+  steps: z.array(WorkflowStepSchema).max(50),
+  outcome: z.object({
+    description: z.string().max(500),
+    assertion: WorkflowStepSchema.optional(),
+  }),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type AutomationWorkflow = z.infer<typeof AutomationWorkflowSchema>;
+
+export const WorkflowStepResultSchema = z.object({
+  stepIndex: z.number().int().nonnegative(),
+  status: z.enum(["pending", "running", "passed", "failed", "skipped"]),
+  evidenceId: z.string().optional(),
+  error: z.string().optional(),
+  startedAt: z.string().optional(),
+  finishedAt: z.string().optional(),
+});
+export type WorkflowStepResult = z.infer<typeof WorkflowStepResultSchema>;
+
+export const WorkflowRunSchema = z.object({
+  id: z.string(),
+  workflowId: z.string(),
+  projectId: z.string(),
+  ownerId: z.string(),
+  status: z.enum(["queued", "running", "passed", "failed", "error"]),
+  startedAt: z.string(),
+  finishedAt: z.string().optional(),
+  stepResults: z.array(WorkflowStepResultSchema),
+  outcomeMet: z.boolean().optional(),
+  error: z.string().optional(),
+});
+export type WorkflowRun = z.infer<typeof WorkflowRunSchema>;
+
+// The GitHub PAT a FrameworkProject is connected with is never embedded
+// here — it lives only in Store's framework_github_tokens table (see
+// Store.setFrameworkGithubToken/frameworkGithubToken) so a FrameworkProject
+// read from any route can be returned to the client as-is.
+export const FrameworkProjectSchema = z.object({
+  id: z.string(),
+  projectId: z.string(),
+  ownerId: z.string(),
+  framework: z.enum(["cypress", "playwright"]),
+  origin: z.enum(["boilerplate", "scratch"]),
+  workspacePath: z.string(),
+  /** Which package manager automation-execution.ts uses to install deps and invoke the framework's CLI. Defaults to npm for projects created before this existed. */
+  packageManager: z.enum(["npm", "yarn", "pnpm"]).default("npm"),
+  github: z
+    .object({
+      repoUrl: httpUrl,
+      defaultBranch: z.string().min(1).max(200).default("main"),
+      connectedAt: z.string(),
+    })
+    .optional(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type FrameworkProject = z.infer<typeof FrameworkProjectSchema>;
+
+export const TestCaseResultSchema = z.object({
+  name: z.string(),
+  status: z.enum(["passed", "failed", "skipped"]),
+  durationMs: z.number().nonnegative().optional(),
+  error: z.string().optional(),
+});
+export type TestCaseResult = z.infer<typeof TestCaseResultSchema>;
+
+export const TestRunSchema = z.object({
+  id: z.string(),
+  frameworkProjectId: z.string(),
+  projectId: z.string(),
+  ownerId: z.string(),
+  status: z.enum(["queued", "running", "passed", "failed", "error"]),
+  command: z.string(),
+  startedAt: z.string(),
+  finishedAt: z.string().optional(),
+  exitCode: z.number().int().optional(),
+  resultsSummary: z
+    .object({
+      total: z.number().int().nonnegative(),
+      passed: z.number().int().nonnegative(),
+      failed: z.number().int().nonnegative(),
+      skipped: z.number().int().nonnegative(),
+    })
+    .optional(),
+  cases: z.array(TestCaseResultSchema).default([]),
+  logPath: z.string().optional(),
+  error: z.string().optional(),
+});
+export type TestRun = z.infer<typeof TestRunSchema>;
+
+// One dependency add/remove against a FrameworkProject's package.json —
+// run as a real `npm install`/`yarn add`/`pnpm add` (or remove) subprocess
+// in the background, same fire-and-forget shape as TestRun, so the
+// package-installation wizard can poll it instead of blocking on an
+// install that can take anywhere from a couple seconds to a minute.
+export const PackageOperationSchema = z.object({
+  id: z.string(),
+  frameworkProjectId: z.string(),
+  projectId: z.string(),
+  ownerId: z.string(),
+  action: z.enum(["add", "remove"]),
+  packageName: z.string(),
+  version: z.string().optional(),
+  dev: z.boolean().optional(),
+  status: z.enum(["running", "done", "error"]),
+  command: z.string(),
+  startedAt: z.string(),
+  finishedAt: z.string().optional(),
+  error: z.string().optional(),
+  /** Tail of combined stdout/stderr, truncated — enough to show in the wizard without persisting unbounded output. */
+  output: z.string().optional(),
+});
+export type PackageOperation = z.infer<typeof PackageOperationSchema>;

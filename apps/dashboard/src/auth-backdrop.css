@@ -1,0 +1,123 @@
+.auth-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.auth-backdrop-aurora {
+  position: absolute;
+  width: 60vmax;
+  height: 60vmax;
+  border-radius: 50%;
+  filter: blur(70px);
+  mix-blend-mode: screen;
+  opacity: 0.55;
+  will-change: transform;
+}
+.auth-backdrop-aurora-a {
+  top: -22%;
+  left: -14%;
+  background: radial-gradient(
+    circle,
+    rgba(66, 212, 189, 0.55),
+    transparent 68%
+  );
+  animation: auth-drift-a 26s ease-in-out infinite;
+}
+.auth-backdrop-aurora-b {
+  right: -20%;
+  bottom: -24%;
+  background: radial-gradient(
+    circle,
+    rgba(66, 111, 209, 0.4),
+    transparent 68%
+  );
+  animation: auth-drift-b 32s ease-in-out infinite;
+}
+.auth-backdrop-aurora-c {
+  top: 28%;
+  right: 8%;
+  width: 42vmax;
+  height: 42vmax;
+  background: radial-gradient(
+    circle,
+    rgba(136, 112, 186, 0.3),
+    transparent 70%
+  );
+  animation: auth-drift-c 22s ease-in-out infinite;
+}
+@keyframes auth-drift-a {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(6%, 8%) scale(1.12);
+  }
+}
+@keyframes auth-drift-b {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(-7%, -6%) scale(1.08);
+  }
+}
+@keyframes auth-drift-c {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(-5%, 7%) scale(0.92);
+  }
+}
+.auth-backdrop-grid {
+  position: absolute;
+  inset: -10%;
+  background-image:
+    linear-gradient(rgba(226, 238, 243, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(226, 238, 243, 0.05) 1px, transparent 1px);
+  background-size: 44px 44px;
+  mask-image: radial-gradient(
+    ellipse 70% 60% at 30% 35%,
+    #000 0%,
+    transparent 72%
+  );
+  animation: auth-grid-pan 60s linear infinite;
+}
+@keyframes auth-grid-pan {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(-44px, -44px, 0);
+  }
+}
+.auth-backdrop-canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+}
+.auth-backdrop-vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    ellipse 85% 75% at 50% 45%,
+    transparent 40%,
+    rgba(8, 15, 24, 0.55) 100%
+  );
+}
+@media (prefers-reduced-motion: reduce) {
+  .auth-backdrop-aurora,
+  .auth-backdrop-grid {
+    animation: none;
+  }
+}
+@media (max-width: 640px) {
+  .auth-backdrop-aurora {
+    opacity: 0.4;
+  }
+}

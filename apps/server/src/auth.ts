@@ -3,6 +3,7 @@ import {
   createDecipheriv,
   createHash,
   randomBytes,
+  randomUUID,
   scryptSync,
   timingSafeEqual,
 } from "node:crypto";
@@ -40,6 +41,17 @@ type TokenResponse = {
 
 const sessionCookie = "unfold_session";
 const sessionLifetimeMs = 30 * 24 * 60 * 60 * 1000;
+/**
+ * Personal access tokens (`createApiToken`/`listApiTokens`/`revokeApiToken`
+ * below): a long-lived, revocable, hash-stored credential for the Chrome
+ * extension (apps/extension) and similar non-interactive clients, which
+ * can't safely hold a short-lived Auth0 access token (expires in ~a day,
+ * no safe place to run an OAuth refresh) or a sensitive refresh token
+ * client-side. This fixed prefix lets `requireAuth` cheaply recognize one
+ * on sight and look it up by hash directly, without first attempting a
+ * (slower, and wrong) Auth0 JWT verification against it.
+ */
+const apiTokenPrefix = "ufld_";
 const cookieValue = (req: Request, name: string) => {
   for (const part of (req.headers.cookie || "").split(";")) {
     const [key, ...value] = part.trim().split("=");
@@ -236,6 +248,17 @@ export function createAuth(store: Store) {
       }
       const authorization = req.get("authorization") || "";
       const bearer = authorization.match(/^Bearer\s+(.+)$/i)?.[1];
+      if (bearer?.startsWith(apiTokenPrefix)) {
+        const row = store.apiTokenByHash(hash(bearer));
+        if (!row) {
+          res.status(401).json({ error: "invalid_access_token" });
+          return;
+        }
+        store.touchApiToken(row.id);
+        res.locals.authUser = { sub: row.owner_id } satisfies Profile;
+        next();
+        return;
+      }
       if (bearer) {
         const payload = await verifyAccessToken(bearer);
         if (typeof payload.sub !== "string")
@@ -502,5 +525,34 @@ export function createAuth(store: Store) {
     );
   };
 
-  return { status, login, callback, me, logout, forgotPassword, requireAuth };
+  /** Mints a new PAT for `ownerId`, returning its plaintext exactly once — only the hash is ever persisted, matching `auth_sessions`'s pattern. */
+  const createApiToken = (ownerId: string, label: string) => {
+    const token = apiTokenPrefix + randomBytes(32).toString("hex");
+    const id = randomUUID();
+    const createdAt = new Date().toISOString();
+    store.createApiToken(
+      id,
+      ownerId,
+      hash(token),
+      label.trim() || "Untitled",
+      createdAt,
+    );
+    return { id, token, label, createdAt };
+  };
+  const listApiTokens = (ownerId: string) => store.apiTokens(ownerId);
+  const revokeApiToken = (ownerId: string, id: string) =>
+    store.deleteApiToken(id, ownerId);
+
+  return {
+    status,
+    login,
+    callback,
+    me,
+    logout,
+    forgotPassword,
+    requireAuth,
+    createApiToken,
+    listApiTokens,
+    revokeApiToken,
+  };
 }

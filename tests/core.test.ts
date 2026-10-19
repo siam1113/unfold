@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   ConfigSchema,
+  synthesizeFormValue,
   type UIElement,
   type TaskLease,
 } from "../packages/shared/src/index.js";
@@ -113,6 +114,57 @@ describe("configuration and safety", () => {
         "fill",
       ).allowed,
     ).toBe(false);
+  });
+  it("always allows fill/select — typing is non-destructive on its own — using the configured value when present, auto-synthetic otherwise", () => {
+    const configured = decide(
+      el({ accessibleName: "Project" }),
+      config.baseUrl,
+      {
+        ...config,
+        formValues: [{ route: "/", label: "Project", value: "test" }],
+      },
+      "fill",
+    );
+    expect(configured.allowed).toBe(true);
+    expect(configured.rule).toBe("synthetic-value");
+
+    const unconfigured = decide(
+      el({ accessibleName: "Email" }),
+      config.baseUrl,
+      config,
+      "fill",
+    );
+    expect(unconfigured.allowed).toBe(true);
+    expect(unconfigured.rule).toBe("auto-synthetic-value");
+  });
+  it("still blocks form submission by default even with safeMode on, but allows it once safeMode is explicitly turned off", () => {
+    const submit = el({ accessibleName: "Sign up", isSubmit: true });
+    expect(decide(submit, config.baseUrl, config, "click").allowed).toBe(false);
+    expect(
+      decide(submit, config.baseUrl, { ...config, safeMode: false }, "click")
+        .allowed,
+    ).toBe(true);
+    // An exact formSubmitAllowlist entry still works regardless of safeMode —
+    // unchanged pre-existing behavior.
+    expect(
+      decide(
+        submit,
+        config.baseUrl,
+        {
+          ...config,
+          formSubmitAllowlist: [{ route: "/", name: "Sign up" }],
+        },
+        "click",
+      ).allowed,
+    ).toBe(true);
+  });
+  it("synthesizes a plausible, format-passing value from inputType or label — never an empty string", () => {
+    expect(synthesizeFormValue("email", undefined)).toContain("@");
+    expect(synthesizeFormValue(undefined, "Email address")).toContain("@");
+    expect(synthesizeFormValue("tel", undefined)).toMatch(/^\+?\d+$/);
+    expect(synthesizeFormValue("number", undefined)).toBe("1");
+    expect(synthesizeFormValue(undefined, "Search")).toBeTruthy();
+    expect(synthesizeFormValue(undefined, undefined)).toBeTruthy();
   });
   it("restricts network scope and detects risky navigation", () => {
     expect(allowedUrl(config.baseUrl + "/projects", config)).toBe(true);

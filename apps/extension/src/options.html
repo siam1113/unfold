@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Unfold WebMCP Tools</title>
+    <style>
+      body {
+        width: 360px;
+        margin: 0;
+        padding: 16px;
+        font: 13px/1.5 -apple-system, system-ui, sans-serif;
+        color: #25364d;
+        background: #fff;
+      }
+      h1 {
+        font-size: 15px;
+        margin: 0 0 4px;
+      }
+      p.lede {
+        color: #73839a;
+        margin: 0 0 16px;
+        font-size: 12px;
+      }
+      section {
+        margin-bottom: 18px;
+      }
+      h2 {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: #73839a;
+        margin: 0 0 8px;
+      }
+      label {
+        display: block;
+        font-size: 11px;
+        font-weight: 600;
+        margin: 8px 0 4px;
+      }
+      input {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 7px 9px;
+        border: 1px solid #d9e1eb;
+        border-radius: 6px;
+        font-size: 12px;
+      }
+      .row {
+        display: flex;
+        gap: 6px;
+      }
+      .row input {
+        flex: 1;
+      }
+      button {
+        padding: 7px 12px;
+        border: 0;
+        border-radius: 6px;
+        background: #3a56a0;
+        color: #fff;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      button.secondary {
+        background: #f4f7ff;
+        color: #3a56a0;
+        border: 1px solid #cedcf0;
+      }
+      button:disabled {
+        opacity: 0.6;
+        cursor: default;
+      }
+      .status {
+        margin-top: 8px;
+        padding: 8px 10px;
+        border-radius: 6px;
+        font-size: 11.5px;
+      }
+      .status.ok {
+        background: #eef7f2;
+        color: #23805e;
+      }
+      .status.error {
+        background: #fff0f0;
+        color: #bd4e4e;
+      }
+      ul {
+        list-style: none;
+        margin: 8px 0 0;
+        padding: 0;
+        border: 1px solid #e4eaf2;
+        border-radius: 7px;
+        overflow: hidden;
+      }
+      li {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 7px 10px;
+        border-bottom: 1px solid #e4eaf2;
+        font-size: 12px;
+      }
+      li:last-child {
+        border-bottom: 0;
+      }
+      li span {
+        flex: 1;
+        overflow-wrap: anywhere;
+      }
+      li button {
+        padding: 3px 8px;
+        font-size: 10px;
+      }
+      .muted {
+        color: #9eacbf;
+        font-size: 11.5px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Unfold WebMCP Tools</h1>
+    <p class="lede">
+      Registers your project's published capabilities as live WebMCP tools
+      on sites you choose.
+    </p>
+
+    <section>
+      <h2>1. Connect to your Unfold server</h2>
+      <form id="connect-form">
+        <label for="server-url">Server URL</label>
+        <input id="server-url" type="url" placeholder="http://localhost:4310" required />
+        <label for="api-token">Personal access token</label>
+        <input id="api-token" type="password" placeholder="ufld_…" required />
+        <div class="row" style="margin-top: 10px">
+          <button type="submit" id="connect-button">Connect</button>
+          <button type="button" class="secondary" id="disconnect-button">Disconnect</button>
+        </div>
+      </form>
+      <div id="connect-status"></div>
+    </section>
+
+    <section>
+      <h2>2. Allow sites</h2>
+      <form id="site-form">
+        <div class="row">
+          <input id="site-url" type="url" placeholder="https://example.com" required />
+          <button type="submit">Add site</button>
+        </div>
+      </form>
+      <ul id="site-list"></ul>
+      <p class="muted" id="site-empty">No sites added yet.</p>
+    </section>
+
+    <script src="options.js"></script>
+  </body>
+</html>

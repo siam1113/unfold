@@ -56,7 +56,9 @@ const safeAuthEndpoint = (url: string) => {
     const path = parsed.pathname
       .split("/")
       .map((segment) =>
-        /token|secret|password|auth|session|credential|api[_-]?key|^[a-f0-9]{24,}$/i.test(segment)
+        /token|secret|password|auth|session|credential|api[_-]?key|^[a-f0-9]{24,}$/i.test(
+          segment,
+        )
           ? "[redacted]"
           : segment,
       )
@@ -104,7 +106,10 @@ const containScreenshot = (
   width: number,
   height: number,
 ) => {
-  const scale = Math.min(width / image.naturalWidth, height / image.naturalHeight);
+  const scale = Math.min(
+    width / image.naturalWidth,
+    height / image.naturalHeight,
+  );
   const drawWidth = image.naturalWidth * scale;
   const drawHeight = image.naturalHeight * scale;
   context.drawImage(
@@ -116,7 +121,12 @@ const containScreenshot = (
   );
 };
 const screenshotPixelView = (
-  pair: { width: number; height: number; earlier: Uint8ClampedArray; later: Uint8ClampedArray },
+  pair: {
+    width: number;
+    height: number;
+    earlier: Uint8ClampedArray;
+    later: Uint8ClampedArray;
+  },
   threshold: number,
   mode: "difference" | "overlay",
   blend: number,
@@ -153,7 +163,10 @@ const screenshotPixelView = (
       output.data[index + 2] = 65;
     } else {
       const gray = Math.round(
-        (pair.earlier[index] + pair.earlier[index + 1] + pair.earlier[index + 2]) / 3,
+        (pair.earlier[index] +
+          pair.earlier[index + 1] +
+          pair.earlier[index + 2]) /
+          3,
       );
       output.data[index] = gray;
       output.data[index + 1] = gray;
@@ -592,16 +605,13 @@ export function ScreenSnapshotDiffView({
     if (!pixelPair) return;
     try {
       setPixelPreview(
-        screenshotPixelView(
-          pixelPair,
-          pixelThreshold,
-          pixelMode,
-          overlayBlend,
-        ),
+        screenshotPixelView(pixelPair, pixelThreshold, pixelMode, overlayBlend),
       );
     } catch {
       setPixelPreview(undefined);
-      setPixelStatus("The browser could not render this screenshot comparison.");
+      setPixelStatus(
+        "The browser could not render this screenshot comparison.",
+      );
     }
   }, [pixelPair, pixelThreshold, pixelMode, overlayBlend]);
   const computePixelDiff = async () => {
@@ -616,15 +626,25 @@ export function ScreenSnapshotDiffView({
       ]);
       const scale = Math.min(
         1,
-        1600 / Math.max(oldImage.naturalWidth, oldImage.naturalHeight, newImage.naturalWidth, newImage.naturalHeight),
+        1600 /
+          Math.max(
+            oldImage.naturalWidth,
+            oldImage.naturalHeight,
+            newImage.naturalWidth,
+            newImage.naturalHeight,
+          ),
       );
       const width = Math.max(
         1,
-        Math.round(Math.max(oldImage.naturalWidth, newImage.naturalWidth) * scale),
+        Math.round(
+          Math.max(oldImage.naturalWidth, newImage.naturalWidth) * scale,
+        ),
       );
       const height = Math.max(
         1,
-        Math.round(Math.max(oldImage.naturalHeight, newImage.naturalHeight) * scale),
+        Math.round(
+          Math.max(oldImage.naturalHeight, newImage.naturalHeight) * scale,
+        ),
       );
       const canvas = document.createElement("canvas");
       canvas.width = width;
@@ -718,7 +738,10 @@ export function ScreenSnapshotDiffView({
         />
         <Snapshot run={later} state={newState} elements={newElements.length} />
       </div>
-      <section className="flv-pixel-diff" aria-labelledby="flv-pixel-diff-title">
+      <section
+        className="flv-pixel-diff"
+        aria-labelledby="flv-pixel-diff-title"
+      >
         <header>
           <div>
             <h3 id="flv-pixel-diff-title">Optional pixel comparison</h3>
@@ -749,7 +772,9 @@ export function ScreenSnapshotDiffView({
               min="0"
               max="255"
               value={pixelThreshold}
-              onChange={(event) => setPixelThreshold(Number(event.target.value))}
+              onChange={(event) =>
+                setPixelThreshold(Number(event.target.value))
+              }
               disabled={!pixelPair}
             />
           </label>
@@ -775,7 +800,9 @@ export function ScreenSnapshotDiffView({
                 min="0"
                 max="100"
                 value={overlayBlend}
-                onChange={(event) => setOverlayBlend(Number(event.target.value))}
+                onChange={(event) =>
+                  setOverlayBlend(Number(event.target.value))
+                }
                 disabled={!pixelPair}
               />
             </label>
@@ -796,7 +823,8 @@ export function ScreenSnapshotDiffView({
             <div>
               <strong>
                 {(
-                  (pixelPreview.changed / (pixelPair.width * pixelPair.height)) *
+                  (pixelPreview.changed /
+                    (pixelPair.width * pixelPair.height)) *
                   100
                 ).toFixed(2)}
                 % pixels exceed the threshold
@@ -815,7 +843,9 @@ export function ScreenSnapshotDiffView({
               }
             />
             {pixelMode === "difference" && (
-              <small>Red pixels exceed the threshold; grayscale pixels do not.</small>
+              <small>
+                Red pixels exceed the threshold; grayscale pixels do not.
+              </small>
             )}
           </div>
         )}
@@ -1217,7 +1247,9 @@ export function RepeatabilityView({
     for (const action of run.actions) {
       const transition = actionIdentity(action, states);
       const source = states.get(action.fromStateId);
-      const target = action.toStateId ? states.get(action.toStateId) : undefined;
+      const target = action.toStateId
+        ? states.get(action.toStateId)
+        : undefined;
       transitionLabels.set(
         transition,
         `${source ? stateName(source) : "Unknown screen"} · ${action.action}${action.targetName ? ` ${action.targetName}` : ""}${target ? ` → ${stateName(target)}` : ""}`,
@@ -1235,13 +1267,18 @@ export function RepeatabilityView({
     };
   });
   const reference = rows[0];
-  const allTransitions = new Set(rows.flatMap((row) => [...row.transitionOutcomes.keys()]));
+  const allTransitions = new Set(
+    rows.flatMap((row) => [...row.transitionOutcomes.keys()]),
+  );
   return (
     <section className="flv" aria-labelledby="flv-repeat-title">
       <header className="flv-heading">
         <div>
           <h2 id="flv-repeat-title">Repeatability across runs</h2>
-          <p>Compare observed transition and outcome consistency across up to five saved discoveries.</p>
+          <p>
+            Compare observed transition and outcome consistency across up to
+            five saved discoveries.
+          </p>
         </div>
       </header>
       {candidates.length > 0 && (
@@ -1260,41 +1297,77 @@ export function RepeatabilityView({
                 }}
               />
               <span>{candidate.name}</span>
-              <small>{new Date(candidate.createdAt).toLocaleDateString()}</small>
+              <small>
+                {new Date(candidate.createdAt).toLocaleDateString()}
+              </small>
             </label>
           ))}
         </fieldset>
       )}
       <Notice tone="caution">
-        This compares saved discovery evidence, not real user traffic. A missing transition means it was not recorded in that run; it does not prove the route or action is unavailable. Coverage and exploration depth can differ between runs.
+        This compares saved discovery evidence, not real user traffic. A missing
+        transition means it was not recorded in that run; it does not prove the
+        route or action is unavailable. Coverage and exploration depth can
+        differ between runs.
       </Notice>
-      {runs.length < 2 && <Prerequisite title="Repeatability" detail="Select at least one recent compatible discovery to compare its recorded transitions and outcomes with the current run." />}
-      {runs.length >= 2 && <div className="flv-table-wrap">
-        <table className="flv-table">
-          <thead>
-            <tr>
-              <th>Observed transition</th>
-              <th>Run coverage</th>
-              <th>Recorded outcomes across covered runs</th>
-            </tr>
-          </thead>
-          <tbody>
-            {[...allTransitions].map((transition) => {
-              const covered = rows.filter((row) => row.transitionOutcomes.has(transition));
-              const outcomes = new Map<string, number>();
-              for (const row of covered)
-                for (const outcome of row.transitionOutcomes.get(transition) || [])
-                  outcomes.set(outcome, (outcomes.get(outcome) || 0) + 1);
-              return <tr key={transition}>
-                <th>{rows.find((row) => row.transitionLabels.has(transition))?.transitionLabels.get(transition) || "Unidentified transition"}</th>
-                <td>{covered.length} / {rows.length} runs</td>
-                <td>{[...outcomes].map(([outcome, count]) => `${outcome}: ${count}`).join(" · ")}</td>
-              </tr>;
-            })}
-          </tbody>
-        </table>
-      </div>}
-      <p className="flv-muted">Screen fingerprints: {rows.map((row) => `${row.run.run.name} ${row.fingerprints.size}`).join(" · ")} · Matching route paths against the current discovery: {reference.routes.size} observed.</p>
+      {runs.length < 2 && (
+        <Prerequisite
+          title="Repeatability"
+          detail="Select at least one recent compatible discovery to compare its recorded transitions and outcomes with the current run."
+        />
+      )}
+      {runs.length >= 2 && (
+        <div className="flv-table-wrap">
+          <table className="flv-table">
+            <thead>
+              <tr>
+                <th>Observed transition</th>
+                <th>Run coverage</th>
+                <th>Recorded outcomes across covered runs</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[...allTransitions].map((transition) => {
+                const covered = rows.filter((row) =>
+                  row.transitionOutcomes.has(transition),
+                );
+                const outcomes = new Map<string, number>();
+                for (const row of covered)
+                  for (const outcome of row.transitionOutcomes.get(
+                    transition,
+                  ) || [])
+                    outcomes.set(outcome, (outcomes.get(outcome) || 0) + 1);
+                return (
+                  <tr key={transition}>
+                    <th>
+                      {rows
+                        .find((row) => row.transitionLabels.has(transition))
+                        ?.transitionLabels.get(transition) ||
+                        "Unidentified transition"}
+                    </th>
+                    <td>
+                      {covered.length} / {rows.length} runs
+                    </td>
+                    <td>
+                      {[...outcomes]
+                        .map(([outcome, count]) => `${outcome}: ${count}`)
+                        .join(" · ")}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <p className="flv-muted">
+        Screen fingerprints:{" "}
+        {rows
+          .map((row) => `${row.run.run.name} ${row.fingerprints.size}`)
+          .join(" · ")}{" "}
+        · Matching route paths against the current discovery:{" "}
+        {reference.routes.size} observed.
+      </p>
     </section>
   );
 }
@@ -1412,27 +1485,51 @@ function validateAnnotationFile(
   if (!parsed || typeof parsed !== "object")
     return { error: "File must contain a flow annotation export." };
   const file = parsed as Record<string, unknown>;
-  if (file.format !== "unfold-flow-annotations" || file.version !== ANNOTATION_FILE_VERSION)
+  if (
+    file.format !== "unfold-flow-annotations" ||
+    file.version !== ANNOTATION_FILE_VERSION
+  )
     return { error: "Unsupported annotation file format or version." };
   if (file.runId !== runId)
-    return { error: "This file belongs to a different discovery. Import was not applied." };
-  if (!Array.isArray(file.annotations) || file.annotations.length > MAX_IMPORTED_ANNOTATIONS)
-    return { error: `File must contain at most ${MAX_IMPORTED_ANNOTATIONS} annotations.` };
+    return {
+      error:
+        "This file belongs to a different discovery. Import was not applied.",
+    };
+  if (
+    !Array.isArray(file.annotations) ||
+    file.annotations.length > MAX_IMPORTED_ANNOTATIONS
+  )
+    return {
+      error: `File must contain at most ${MAX_IMPORTED_ANNOTATIONS} annotations.`,
+    };
   const annotations: Annotation[] = [];
   for (const item of file.annotations) {
     if (!item || typeof item !== "object")
       return { error: "An annotation record is malformed." };
     const entry = item as Record<string, unknown>;
     if (
-      typeof entry.id !== "string" || !entry.id || entry.id.length > 100 ||
+      typeof entry.id !== "string" ||
+      !entry.id ||
+      entry.id.length > 100 ||
       (entry.targetKind !== "state" && entry.targetKind !== "action") ||
-      typeof entry.targetId !== "string" || !entry.targetId || entry.targetId.length > 200 ||
-      typeof entry.note !== "string" || entry.note.length > 5000 ||
-      typeof entry.owner !== "string" || entry.owner.length > 120 ||
-      (entry.status !== "open" && entry.status !== "reviewing" && entry.status !== "resolved") ||
-      typeof entry.updatedAt !== "string" || entry.updatedAt.length > 50 ||
+      typeof entry.targetId !== "string" ||
+      !entry.targetId ||
+      entry.targetId.length > 200 ||
+      typeof entry.note !== "string" ||
+      entry.note.length > 5000 ||
+      typeof entry.owner !== "string" ||
+      entry.owner.length > 120 ||
+      (entry.status !== "open" &&
+        entry.status !== "reviewing" &&
+        entry.status !== "resolved") ||
+      typeof entry.updatedAt !== "string" ||
+      entry.updatedAt.length > 50 ||
       !Number.isFinite(Date.parse(entry.updatedAt))
-    ) return { error: "An annotation has invalid fields or exceeds a field size limit." };
+    )
+      return {
+        error:
+          "An annotation has invalid fields or exceeds a field size limit.",
+      };
     annotations.push({
       id: entry.id,
       targetKind: entry.targetKind,
@@ -1491,7 +1588,9 @@ export function AnnotatedFlowNotes({
   const add = () => {
     if (!targetId || !note.trim()) return;
     if (items.length >= MAX_IMPORTED_ANNOTATIONS) {
-      setTransferMessage(`This browser already has the maximum of ${MAX_IMPORTED_ANNOTATIONS} annotations.`);
+      setTransferMessage(
+        `This browser already has the maximum of ${MAX_IMPORTED_ANNOTATIONS} annotations.`,
+      );
       return;
     }
     setItems((current) => [
@@ -1513,7 +1612,9 @@ export function AnnotatedFlowNotes({
   };
   const exportAnnotations = () => {
     if (items.length > MAX_IMPORTED_ANNOTATIONS) {
-      setTransferMessage(`Export is limited to ${MAX_IMPORTED_ANNOTATIONS} annotations. Remove some notes first.`);
+      setTransferMessage(
+        `Export is limited to ${MAX_IMPORTED_ANNOTATIONS} annotations. Remove some notes first.`,
+      );
       return;
     }
     const file = {
@@ -1538,7 +1639,9 @@ export function AnnotatedFlowNotes({
     setImportText("");
     if (!file) return;
     if (file.size > MAX_ANNOTATION_FILE_BYTES) {
-      setTransferMessage("File is too large (maximum 1 MB). Choose another file.");
+      setTransferMessage(
+        "File is too large (maximum 1 MB). Choose another file.",
+      );
       return;
     }
     try {
@@ -1549,7 +1652,9 @@ export function AnnotatedFlowNotes({
         return;
       }
       setImportText(text);
-      setTransferMessage(`${validation.annotations?.length || 0} annotations ready to ${importMode}.`);
+      setTransferMessage(
+        `${validation.annotations?.length || 0} annotations ready to ${importMode}.`,
+      );
     } catch {
       setTransferMessage("Could not read the selected annotation file.");
     }
@@ -1557,7 +1662,9 @@ export function AnnotatedFlowNotes({
   const importAnnotations = () => {
     const validation = validateAnnotationFile(importText, data.run.id);
     if (validation.error || !validation.annotations) {
-      setTransferMessage(validation.error || "Annotation file could not be validated.");
+      setTransferMessage(
+        validation.error || "Annotation file could not be validated.",
+      );
       return;
     }
     const incoming = validation.annotations;
@@ -1567,7 +1674,9 @@ export function AnnotatedFlowNotes({
       const merged = new Map(items.map((item) => [item.id, item]));
       for (const item of incoming) merged.set(item.id, item);
       if (merged.size > MAX_IMPORTED_ANNOTATIONS) {
-        setTransferMessage(`Merged result would exceed ${MAX_IMPORTED_ANNOTATIONS} annotations. Choose replace or remove local notes first.`);
+        setTransferMessage(
+          `Merged result would exceed ${MAX_IMPORTED_ANNOTATIONS} annotations. Choose replace or remove local notes first.`,
+        );
         return;
       }
       setItems((current) => {
@@ -1577,7 +1686,9 @@ export function AnnotatedFlowNotes({
       });
     }
     setImportText("");
-    setTransferMessage(`${incoming.length} annotations ${importMode === "replace" ? "replaced" : "merged"} into this browser's local notes.`);
+    setTransferMessage(
+      `${incoming.length} annotations ${importMode === "replace" ? "replaced" : "merged"} into this browser's local notes.`,
+    );
   };
   const labelFor = (item: Annotation) =>
     item.targetKind === "state"
@@ -1600,25 +1711,56 @@ export function AnnotatedFlowNotes({
           ? "Browser storage is unavailable; notes remain only until this page closes."
           : "Notes are saved in this browser for this discovery. They are not uploaded or included in exported evidence."}
       </Notice>
-      <section className="flv-annotation-transfer" aria-label="Annotation file transfer">
+      <section
+        className="flv-annotation-transfer"
+        aria-label="Annotation file transfer"
+      >
         <div>
           <h3>Share annotation file</h3>
-          <p>Manual file sharing only. Files stay on this device unless you choose to share them; there is no live collaboration or upload.</p>
+          <p>
+            Manual file sharing only. Files stay on this device unless you
+            choose to share them; there is no live collaboration or upload.
+          </p>
         </div>
-        <button type="button" onClick={exportAnnotations} disabled={!ready}>Export JSON</button>
+        <button type="button" onClick={exportAnnotations} disabled={!ready}>
+          Export JSON
+        </button>
         <label className="flv-annotation-file">
           Import JSON
-          <input type="file" accept="application/json,.json" onChange={(event) => void readAnnotationFile(event.target.files?.[0])} />
+          <input
+            type="file"
+            accept="application/json,.json"
+            onChange={(event) =>
+              void readAnnotationFile(event.target.files?.[0])
+            }
+          />
         </label>
         <label>
           Import choice
-          <select value={importMode} onChange={(event) => setImportMode(event.target.value as "merge" | "replace")}>
-            <option value="merge">Merge (file entries replace matching IDs)</option>
+          <select
+            value={importMode}
+            onChange={(event) =>
+              setImportMode(event.target.value as "merge" | "replace")
+            }
+          >
+            <option value="merge">
+              Merge (file entries replace matching IDs)
+            </option>
             <option value="replace">Replace all local notes</option>
           </select>
         </label>
-        <button type="button" onClick={importAnnotations} disabled={!importText}>Apply import</button>
-        {transferMessage && <p role="status" className="flv-annotation-transfer-message">{transferMessage}</p>}
+        <button
+          type="button"
+          onClick={importAnnotations}
+          disabled={!importText}
+        >
+          Apply import
+        </button>
+        {transferMessage && (
+          <p role="status" className="flv-annotation-transfer-message">
+            {transferMessage}
+          </p>
+        )}
       </section>
       <div className="flv-note-editor">
         <label>
@@ -1670,7 +1812,11 @@ export function AnnotatedFlowNotes({
           type="button"
           className="flv-primary"
           onClick={add}
-          disabled={!targetId || !note.trim() || items.length >= MAX_IMPORTED_ANNOTATIONS}
+          disabled={
+            !targetId ||
+            !note.trim() ||
+            items.length >= MAX_IMPORTED_ANNOTATIONS
+          }
         >
           Save note
         </button>
@@ -1829,7 +1975,9 @@ export function ResponsiveComparisonView({ runs }: { runs: RunData[] }) {
     return [...groups.entries()].map(([key, group]) => ({ key, ...group }));
   };
   const stateGeometry = (run: RunData, state: AppState) => {
-    const elements = run.elements.filter((element) => element.stateId === state.id);
+    const elements = run.elements.filter(
+      (element) => element.stateId === state.id,
+    );
     const width = run.run.config.viewport.width;
     const height = run.run.config.viewport.height;
     const overflow = elements.filter(
@@ -1840,16 +1988,34 @@ export function ResponsiveComparisonView({ runs }: { runs: RunData[] }) {
         element.box.y + element.box.height > height,
     ).length;
     const mean = (values: number[]) =>
-      values.length ? Math.round(values.reduce((a, b) => a + b, 0) / values.length) : 0;
+      values.length
+        ? Math.round(values.reduce((a, b) => a + b, 0) / values.length)
+        : 0;
     return {
       count: elements.length,
       overflow,
       meanWidth: mean(elements.map((element) => element.box.width)),
       meanHeight: mean(elements.map((element) => element.box.height)),
-      minX: elements.length ? Math.round(Math.min(...elements.map((element) => element.box.x))) : undefined,
-      minY: elements.length ? Math.round(Math.min(...elements.map((element) => element.box.y))) : undefined,
-      maxRight: elements.length ? Math.round(Math.max(...elements.map((element) => element.box.x + element.box.width))) : undefined,
-      maxBottom: elements.length ? Math.round(Math.max(...elements.map((element) => element.box.y + element.box.height))) : undefined,
+      minX: elements.length
+        ? Math.round(Math.min(...elements.map((element) => element.box.x)))
+        : undefined,
+      minY: elements.length
+        ? Math.round(Math.min(...elements.map((element) => element.box.y)))
+        : undefined,
+      maxRight: elements.length
+        ? Math.round(
+            Math.max(
+              ...elements.map((element) => element.box.x + element.box.width),
+            ),
+          )
+        : undefined,
+      maxBottom: elements.length
+        ? Math.round(
+            Math.max(
+              ...elements.map((element) => element.box.y + element.box.height),
+            ),
+          )
+        : undefined,
     };
   };
   return (
@@ -1880,14 +2046,25 @@ export function ResponsiveComparisonView({ runs }: { runs: RunData[] }) {
               const exactMatchCount = [...group.statesByRun.values()].filter(
                 (states) => states.length > 0,
               ).length;
-              const actionRows = new Map<string, { label: string; byRun: Map<string, ActionEdge[]> }>();
+              const actionRows = new Map<
+                string,
+                { label: string; byRun: Map<string, ActionEdge[]> }
+              >();
               for (const run of viewportRuns) {
                 for (const state of group.statesByRun.get(run.run.id) || []) {
-                  for (const action of run.actions.filter((item) => item.fromStateId === state.id)) {
+                  for (const action of run.actions.filter(
+                    (item) => item.fromStateId === state.id,
+                  )) {
                     const label = `${action.action} · ${(action.targetName || "unnamed control").trim().replace(/\s+/g, " ")}`;
                     const key = label.toLocaleLowerCase();
-                    const row = actionRows.get(key) || { label, byRun: new Map<string, ActionEdge[]>() };
-                    row.byRun.set(run.run.id, [...(row.byRun.get(run.run.id) || []), action]);
+                    const row = actionRows.get(key) || {
+                      label,
+                      byRun: new Map<string, ActionEdge[]>(),
+                    };
+                    row.byRun.set(run.run.id, [
+                      ...(row.byRun.get(run.run.id) || []),
+                      action,
+                    ]);
                     actionRows.set(key, row);
                   }
                 }
@@ -1897,7 +2074,8 @@ export function ResponsiveComparisonView({ runs }: { runs: RunData[] }) {
                   <div className="flv-responsive-state-title">
                     <strong>{group.label}</strong>
                     <small>
-                      {group.key.startsWith("fingerprint:") && exactMatchCount > 1
+                      {group.key.startsWith("fingerprint:") &&
+                      exactMatchCount > 1
                         ? `Same captured fingerprint in ${exactMatchCount} runs`
                         : "No matching state fingerprint across runs"}
                     </small>
@@ -1906,18 +2084,25 @@ export function ResponsiveComparisonView({ runs }: { runs: RunData[] }) {
                     {viewportRuns.map((run) => {
                       const states = group.statesByRun.get(run.run.id) || [];
                       return (
-                        <article className="flv-responsive-run" key={run.run.id}>
+                        <article
+                          className="flv-responsive-run"
+                          key={run.run.id}
+                        >
                           <header>
                             <strong>{run.run.name}</strong>
                             <small>
-                              {run.run.config.viewport.width} × {run.run.config.viewport.height}
+                              {run.run.config.viewport.width} ×{" "}
+                              {run.run.config.viewport.height}
                             </small>
                           </header>
                           {states.length ? (
                             states.map((state) => {
                               const geometry = stateGeometry(run, state);
                               return (
-                                <div className="flv-responsive-capture" key={state.id}>
+                                <div
+                                  className="flv-responsive-capture"
+                                  key={state.id}
+                                >
                                   {state.screenshotPath ? (
                                     <img
                                       src={`/artifacts/${state.screenshotPath}`}
@@ -1926,17 +2111,25 @@ export function ResponsiveComparisonView({ runs }: { runs: RunData[] }) {
                                     />
                                   ) : (
                                     <div className="flv-responsive-missing">
-                                      <FileImage size={16} /> Screenshot not captured
+                                      <FileImage size={16} /> Screenshot not
+                                      captured
                                     </div>
                                   )}
                                   <small>{showTime(state.discoveredAt)}</small>
                                   <div className="flv-responsive-geometry">
                                     <span>{geometry.count} controls</span>
-                                    <span>Mean box {geometry.meanWidth} × {geometry.meanHeight}px</span>
-                                    <span>{geometry.overflow} outside viewport</span>
+                                    <span>
+                                      Mean box {geometry.meanWidth} ×{" "}
+                                      {geometry.meanHeight}px
+                                    </span>
+                                    <span>
+                                      {geometry.overflow} outside viewport
+                                    </span>
                                     {geometry.count > 0 && (
                                       <span>
-                                        Bounds x {geometry.minX}–{geometry.maxRight}, y {geometry.minY}–{geometry.maxBottom}
+                                        Bounds x {geometry.minX}–
+                                        {geometry.maxRight}, y {geometry.minY}–
+                                        {geometry.maxBottom}
                                       </span>
                                     )}
                                   </div>
@@ -1954,18 +2147,52 @@ export function ResponsiveComparisonView({ runs }: { runs: RunData[] }) {
                   </div>
                   <div className="flv-responsive-actions">
                     <h4>Observed action path comparison</h4>
-                    <p>Actions are aligned by captured action type and control label from states with the same fingerprint. Destinations and outcomes remain per-run evidence.</p>
-                    {[...actionRows.entries()].map(([key, row]) => <div className="flv-responsive-action-row" key={key}>
-                      <strong>{row.label}</strong>
-                      {viewportRuns.map((run) => {
-                        const matches = row.byRun.get(run.run.id) || [];
-                        return <span key={run.run.id}><small>{run.run.config.viewport.width}×{run.run.config.viewport.height}</small>{matches.length ? matches.map((action) => {
-                          const destination = action.toStateId ? run.states.find((item) => item.id === action.toStateId) : undefined;
-                          return <em key={action.id}>{action.decision.replaceAll("_", " ")} → {destination ? stateRoute(destination) : "destination unknown"}</em>;
-                        }) : <em>Not observed</em>}</span>;
-                      })}
-                    </div>)}
-                    {!actionRows.size && <small>No linked action records were captured for these matching states.</small>}
+                    <p>
+                      Actions are aligned by captured action type and control
+                      label from states with the same fingerprint. Destinations
+                      and outcomes remain per-run evidence.
+                    </p>
+                    {[...actionRows.entries()].map(([key, row]) => (
+                      <div className="flv-responsive-action-row" key={key}>
+                        <strong>{row.label}</strong>
+                        {viewportRuns.map((run) => {
+                          const matches = row.byRun.get(run.run.id) || [];
+                          return (
+                            <span key={run.run.id}>
+                              <small>
+                                {run.run.config.viewport.width}×
+                                {run.run.config.viewport.height}
+                              </small>
+                              {matches.length ? (
+                                matches.map((action) => {
+                                  const destination = action.toStateId
+                                    ? run.states.find(
+                                        (item) => item.id === action.toStateId,
+                                      )
+                                    : undefined;
+                                  return (
+                                    <em key={action.id}>
+                                      {action.decision.replaceAll("_", " ")} →{" "}
+                                      {destination
+                                        ? stateRoute(destination)
+                                        : "destination unknown"}
+                                    </em>
+                                  );
+                                })
+                              ) : (
+                                <em>Not observed</em>
+                              )}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    ))}
+                    {!actionRows.size && (
+                      <small>
+                        No linked action records were captured for these
+                        matching states.
+                      </small>
+                    )}
                   </div>
                 </div>
               );
@@ -1997,14 +2224,24 @@ export function AuthenticationSessionView({
   );
   const actions = data.actions.filter((action) => {
     const evidence = action.browserEvidence;
-    const directAuthCue = Boolean(evidence && [
-      evidence.before.passwordControlCount, evidence.after.passwordControlCount,
-      evidence.before.identifierControlCount, evidence.after.identifierControlCount,
-      evidence.before.signInControlCount, evidence.after.signInControlCount,
-      evidence.before.signOutControlCount, evidence.after.signOutControlCount,
-    ].some((count) => count > 0));
-    return directAuthCue || terms.test(
-      `${action.targetName} ${action.beforeUrl} ${action.afterUrl || ""}`,
+    const directAuthCue = Boolean(
+      evidence &&
+      [
+        evidence.before.passwordControlCount,
+        evidence.after.passwordControlCount,
+        evidence.before.identifierControlCount,
+        evidence.after.identifierControlCount,
+        evidence.before.signInControlCount,
+        evidence.after.signInControlCount,
+        evidence.before.signOutControlCount,
+        evidence.after.signOutControlCount,
+      ].some((count) => count > 0),
+    );
+    return (
+      directAuthCue ||
+      terms.test(
+        `${action.targetName} ${action.beforeUrl} ${action.afterUrl || ""}`,
+      )
     );
   });
   const authActions = actions.map((action) => {
@@ -2013,18 +2250,26 @@ export function AuthenticationSessionView({
     const before = evidence?.before;
     const after = evidence?.after;
     const kinds = [
-      before?.passwordControlCount || after?.passwordControlCount ? "password field observed" : undefined,
-      before?.identifierControlCount || after?.identifierControlCount ? "identifier field observed" : undefined,
-      before?.signInControlCount || after?.signInControlCount ? "sign-in control observed" : undefined,
-      before?.signOutControlCount || after?.signOutControlCount ? "sign-out control observed" : undefined,
+      before?.passwordControlCount || after?.passwordControlCount
+        ? "password field observed"
+        : undefined,
+      before?.identifierControlCount || after?.identifierControlCount
+        ? "identifier field observed"
+        : undefined,
+      before?.signInControlCount || after?.signInControlCount
+        ? "sign-in control observed"
+        : undefined,
+      before?.signOutControlCount || after?.signOutControlCount
+        ? "sign-out control observed"
+        : undefined,
     ].filter((item): item is string => Boolean(item));
     const kind = kinds.length
       ? kinds.join(" · ")
       : signInTerms.test(label)
-      ? "Sign-in-like action"
-      : signOutTerms.test(label)
-        ? "Sign-out-like action"
-        : "Authentication-related action";
+        ? "Sign-in-like action"
+        : signOutTerms.test(label)
+          ? "Sign-out-like action"
+          : "Authentication-related action";
     const from = statesById.get(action.fromStateId);
     const to = action.toStateId ? statesById.get(action.toStateId) : undefined;
     return { action, kind, from, to };
@@ -2035,9 +2280,11 @@ export function AuthenticationSessionView({
       const action = call.actionId
         ? data.actions.find((candidate) => candidate.id === call.actionId)
         : undefined;
-      const from = (call.fromStateId && statesById.get(call.fromStateId)) ||
+      const from =
+        (call.fromStateId && statesById.get(call.fromStateId)) ||
         (action && statesById.get(action.fromStateId));
-      const to = (call.toStateId && statesById.get(call.toStateId)) ||
+      const to =
+        (call.toStateId && statesById.get(call.toStateId)) ||
         (action?.toStateId && statesById.get(action.toStateId));
       return { call, action, from, to };
     });
@@ -2047,7 +2294,10 @@ export function AuthenticationSessionView({
       <header className="flv-heading">
         <div>
           <h2 id="flv-auth-title">Authentication and session candidates</h2>
-          <p>Browser-observed password/identifier fields and sign-in/out controls, response statuses, and route changes.</p>
+          <p>
+            Browser-observed password/identifier fields and sign-in/out
+            controls, response statuses, and route changes.
+          </p>
         </div>
       </header>
       <Notice tone="caution">
@@ -2057,10 +2307,21 @@ export function AuthenticationSessionView({
         evidence. Credentials, tokens, request bodies, field values, and the
         configured auth file path are never shown here.
       </Notice>
-      <div className="flv-auth-summary" aria-label="Authentication evidence summary">
-        <span><strong>{authActions.length}</strong> actions with auth-related cues or labels</span>
-        <span><strong>{protectedResponses.length}</strong> API 401/403 responses</span>
-        <span><strong>{authStateConfigured ? "Configured" : "Not recorded"}</strong> auth state</span>
+      <div
+        className="flv-auth-summary"
+        aria-label="Authentication evidence summary"
+      >
+        <span>
+          <strong>{authActions.length}</strong> actions with auth-related cues
+          or labels
+        </span>
+        <span>
+          <strong>{protectedResponses.length}</strong> API 401/403 responses
+        </span>
+        <span>
+          <strong>{authStateConfigured ? "Configured" : "Not recorded"}</strong>{" "}
+          auth state
+        </span>
       </div>
       <Notice>
         Identity and session state transitions are unknown unless the run
@@ -2099,10 +2360,14 @@ export function AuthenticationSessionView({
                   onClick={() => onSelect({ kind: "action", id: action.id })}
                 >
                   <strong>{kind}</strong>
-                  <span>{action.action} {action.targetName}</span>
+                  <span>
+                    {action.action} {action.targetName}
+                  </span>
                   <small>
                     {from ? stateRoute(from) : pathname(action.beforeUrl)}
-                    {to || action.afterUrl ? ` → ${to ? stateRoute(to) : pathname(action.afterUrl!)}` : " → outcome unknown"}
+                    {to || action.afterUrl
+                      ? ` → ${to ? stateRoute(to) : pathname(action.afterUrl!)}`
+                      : " → outcome unknown"}
                     {` · ${action.decision}`}
                   </small>
                 </button>
@@ -2124,23 +2389,58 @@ export function AuthenticationSessionView({
               <li key={call.id} className="flv-auth-record">
                 <div className="flv-auth-response">
                   <span className="flv-auth-status">HTTP {call.status}</span>
-                  <span>{call.method.toUpperCase()} {safeAuthEndpoint(call.url)}</span>
+                  <span>
+                    {call.method.toUpperCase()} {safeAuthEndpoint(call.url)}
+                  </span>
                   <small>
                     {from ? stateRoute(from) : "Source route unknown"}
-                    {to ? ` → ${stateRoute(to)}` : action?.afterUrl ? ` → ${pathname(action.afterUrl)}` : " → resulting route unknown"}
+                    {to
+                      ? ` → ${stateRoute(to)}`
+                      : action?.afterUrl
+                        ? ` → ${pathname(action.afterUrl)}`
+                        : " → resulting route unknown"}
                   </small>
-                  <small>{action ? "Linked to an observed action" : "No linked action; trigger unknown"}</small>
+                  <small>
+                    {action
+                      ? "Linked to an observed action"
+                      : "No linked action; trigger unknown"}
+                  </small>
                 </div>
                 <div className="flv-auth-links">
-                  {action && <button type="button" onClick={() => onSelect({ kind: "action", id: action.id })}>Open action</button>}
-                  {from && <button type="button" onClick={() => onSelect({ kind: "state", id: from.id })}>Open source state</button>}
-                  {to && <button type="button" onClick={() => onSelect({ kind: "state", id: to.id })}>Open resulting state</button>}
+                  {action && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        onSelect({ kind: "action", id: action.id })
+                      }
+                    >
+                      Open action
+                    </button>
+                  )}
+                  {from && (
+                    <button
+                      type="button"
+                      onClick={() => onSelect({ kind: "state", id: from.id })}
+                    >
+                      Open source state
+                    </button>
+                  )}
+                  {to && (
+                    <button
+                      type="button"
+                      onClick={() => onSelect({ kind: "state", id: to.id })}
+                    >
+                      Open resulting state
+                    </button>
+                  )}
                 </div>
               </li>
             ))}
           </ul>
         ) : (
-          <p className="flv-empty-inline">No API responses with HTTP 401 or 403 were recorded in this run.</p>
+          <p className="flv-empty-inline">
+            No API responses with HTTP 401 or 403 were recorded in this run.
+          </p>
         )}
       </section>
     </section>
@@ -2194,14 +2494,39 @@ export function BrowserSideEffectView({
         add(event, action, tabId);
     }
     for (const event of action.browserEvidence?.events || []) {
-      if (event.kind === "download") add("download", action, event.outcome || "observed");
-      else if (event.kind === "dialog") add("dialog", action, `${event.dialogType || "unknown"} · auto-dismissed`);
-      else if (event.kind === "tab_opened" || event.kind === "tab_activated" || event.kind === "tab_closed")
-        add(event.kind, action, `${event.tabId || "tab unknown"}${event.parentTabId ? ` · opener ${event.parentTabId}` : ""}`);
-      else if (event.kind === "permission_request" || event.kind === "permission_query")
-        add(event.kind, action, `${event.permission || "other"} · ${event.permissionState || "state unknown"}`);
+      if (event.kind === "download")
+        add("download", action, event.outcome || "observed");
+      else if (event.kind === "dialog")
+        add(
+          "dialog",
+          action,
+          `${event.dialogType || "unknown"} · auto-dismissed`,
+        );
+      else if (
+        event.kind === "tab_opened" ||
+        event.kind === "tab_activated" ||
+        event.kind === "tab_closed"
+      )
+        add(
+          event.kind,
+          action,
+          `${event.tabId || "tab unknown"}${event.parentTabId ? ` · opener ${event.parentTabId}` : ""}`,
+        );
+      else if (
+        event.kind === "permission_request" ||
+        event.kind === "permission_query"
+      )
+        add(
+          event.kind,
+          action,
+          `${event.permission || "other"} · ${event.permissionState || "state unknown"}`,
+        );
       else if (event.kind === "redirect")
-        add("redirect", action, `HTTP ${event.status || "unknown"} · ${event.origin || "origin unknown"}`);
+        add(
+          "redirect",
+          action,
+          `HTTP ${event.status || "unknown"} · ${event.origin || "origin unknown"}`,
+        );
     }
   }
   const title: Record<string, string> = {
@@ -2233,7 +2558,8 @@ export function BrowserSideEffectView({
         Groups include browser protocol navigation, network-origin, popup,
         download, dialog, and permission API events. Tab IDs last for one action
         replay and are linked only within that action. The capture stores
-        origins and aggregate storage counts, never paths, values, or cookie contents.
+        origins and aggregate storage counts, never paths, values, or cookie
+        contents.
       </Notice>
       {groups.size === 0 ? (
         <div className="flv-empty">
@@ -2345,8 +2671,16 @@ export function ChangeImpactView({ earlier, later }: RunPairProps) {
   const journeyPaths = (run: RunData) => {
     const stateById = new Map(run.states.map((state) => [state.id, state]));
     const outgoing = new Map<string, ActionEdge[]>();
-    const incoming = new Set(run.actions.map((action) => action.toStateId).filter((id): id is string => Boolean(id)));
-    for (const action of run.actions) outgoing.set(action.fromStateId, [...(outgoing.get(action.fromStateId) || []), action]);
+    const incoming = new Set(
+      run.actions
+        .map((action) => action.toStateId)
+        .filter((id): id is string => Boolean(id)),
+    );
+    for (const action of run.actions)
+      outgoing.set(action.fromStateId, [
+        ...(outgoing.get(action.fromStateId) || []),
+        action,
+      ]);
     const starts = run.states.filter((state) => !incoming.has(state.id));
     const paths = new Set<string>();
     let visits = 0;
@@ -2362,21 +2696,36 @@ export function ChangeImpactView({ earlier, later }: RunPairProps) {
       }
       for (const action of next) {
         const source = stateById.get(action.fromStateId);
-        const destination = action.toStateId ? stateById.get(action.toStateId) : undefined;
+        const destination = action.toStateId
+          ? stateById.get(action.toStateId)
+          : undefined;
         const step = `${source ? stateRoute(source) : "unknown source"} · ${action.action} ${action.targetName || "unnamed control"} · ${action.decision} → ${destination ? stateRoute(destination) : "unknown"}`;
         const nextChain = [...chain, step];
-        if (!action.toStateId || visited.has(action.toStateId)) paths.add(nextChain.join(" → "));
-        else walk(action.toStateId, nextChain, new Set([...visited, action.toStateId]));
+        if (!action.toStateId || visited.has(action.toStateId))
+          paths.add(nextChain.join(" → "));
+        else
+          walk(
+            action.toStateId,
+            nextChain,
+            new Set([...visited, action.toStateId]),
+          );
       }
     };
     starts.forEach((state) => walk(state.id, [], new Set([state.id])));
-    if (!starts.length) run.states.slice(0, 20).forEach((state) => walk(state.id, [], new Set([state.id])));
+    if (!starts.length)
+      run.states
+        .slice(0, 20)
+        .forEach((state) => walk(state.id, [], new Set([state.id])));
     return paths;
   };
   const previousJourneys = journeyPaths(earlier);
   const currentJourneys = journeyPaths(later);
-  const addedJourneys = [...currentJourneys].filter((path) => !previousJourneys.has(path));
-  const removedJourneys = [...previousJourneys].filter((path) => !currentJourneys.has(path));
+  const addedJourneys = [...currentJourneys].filter(
+    (path) => !previousJourneys.has(path),
+  );
+  const removedJourneys = [...previousJourneys].filter(
+    (path) => !currentJourneys.has(path),
+  );
   return (
     <section className="flv" aria-labelledby="flv-impact-title">
       <header className="flv-heading">
@@ -2420,7 +2769,13 @@ export function ChangeImpactView({ earlier, later }: RunPairProps) {
           added={addedActions.length}
           removed={removedActions.length}
         />
-        <Metric label="Observed journey paths" before={previousJourneys.size} after={currentJourneys.size} added={addedJourneys.length} removed={removedJourneys.length} />
+        <Metric
+          label="Observed journey paths"
+          before={previousJourneys.size}
+          after={currentJourneys.size}
+          added={addedJourneys.length}
+          removed={removedJourneys.length}
+        />
       </div>
       <div className="flv-columns">
         <section className="flv-list-panel">
@@ -2460,9 +2815,21 @@ export function ChangeImpactView({ earlier, later }: RunPairProps) {
         </section>
         <section className="flv-list-panel flv-impact-paths">
           <h3>Journey paths changed</h3>
-          <p className="flv-footnote">Contiguous recorded action sequences, traced from start states up to eight steps. Paths are bounded to 4,000 expansions per discovery.</p>
-          <strong>{addedJourneys.length} added · {removedJourneys.length} no longer observed</strong>
-          <RecordList items={[...addedJourneys.slice(0, 4).map((path) => `Added: ${path}`), ...removedJourneys.slice(0, 4).map((path) => `Earlier: ${path}`)]} empty="No journey path changed within the captured graph." />
+          <p className="flv-footnote">
+            Contiguous recorded action sequences, traced from start states up to
+            eight steps. Paths are bounded to 4,000 expansions per discovery.
+          </p>
+          <strong>
+            {addedJourneys.length} added · {removedJourneys.length} no longer
+            observed
+          </strong>
+          <RecordList
+            items={[
+              ...addedJourneys.slice(0, 4).map((path) => `Added: ${path}`),
+              ...removedJourneys.slice(0, 4).map((path) => `Earlier: ${path}`),
+            ]}
+            empty="No journey path changed within the captured graph."
+          />
         </section>
         {(
           [
@@ -2483,12 +2850,19 @@ export function ChangeImpactView({ earlier, later }: RunPairProps) {
           <section className="flv-list-panel flv-impact-paths" key={title}>
             <h3>{title}</h3>
             <p className="flv-footnote">
-              {signatures.length} signature{signatures.length === 1 ? "" : "s"} · evidence from saved action records
+              {signatures.length} signature{signatures.length === 1 ? "" : "s"}{" "}
+              · evidence from saved action records
             </p>
             {signatures.length ? (
               <ol className="flv-impact-path-list">
                 {signatures.slice(0, 8).map((signature) => {
-                  const [sourceFingerprint, actionKind, targetName, targetFingerprint, decision] = signature.split("\u0000");
+                  const [
+                    sourceFingerprint,
+                    actionKind,
+                    targetName,
+                    targetFingerprint,
+                    decision,
+                  ] = signature.split("\u0000");
                   const records = evidence.get(signature) || [];
                   return (
                     <li key={signature}>
@@ -2496,25 +2870,38 @@ export function ChangeImpactView({ earlier, later }: RunPairProps) {
                         {actionKind} {targetName || "control"} · {decision}
                       </strong>
                       <small className="flv-impact-signature">
-                        State signature: {sourceFingerprint} → {targetFingerprint}
+                        State signature: {sourceFingerprint} →{" "}
+                        {targetFingerprint}
                       </small>
                       <div className="flv-impact-fragments">
-                        {records.slice(0, 4).map(({ action, source, destination }, index) => (
-                          <div className="flv-impact-fragment" key={`${action.id}:${index}`}>
-                            <span>{source ? stateRoute(source) : "Unknown source state"}</span>
-                            <b aria-label={`Action: ${action.action}`}>
-                              {action.action} {action.targetName || "control"}
-                            </b>
-                            <ArrowRight size={12} aria-hidden="true" />
-                            <span>
-                              {destination
-                                ? stateRoute(destination)
-                                : "Unknown destination state"}
-                            </span>
-                          </div>
-                        ))}
+                        {records
+                          .slice(0, 4)
+                          .map(({ action, source, destination }, index) => (
+                            <div
+                              className="flv-impact-fragment"
+                              key={`${action.id}:${index}`}
+                            >
+                              <span>
+                                {source
+                                  ? stateRoute(source)
+                                  : "Unknown source state"}
+                              </span>
+                              <b aria-label={`Action: ${action.action}`}>
+                                {action.action} {action.targetName || "control"}
+                              </b>
+                              <ArrowRight size={12} aria-hidden="true" />
+                              <span>
+                                {destination
+                                  ? stateRoute(destination)
+                                  : "Unknown destination state"}
+                              </span>
+                            </div>
+                          ))}
                         {records.length > 4 && (
-                          <small>{records.length - 4} additional matching records omitted</small>
+                          <small>
+                            {records.length - 4} additional matching records
+                            omitted
+                          </small>
                         )}
                       </div>
                     </li>
@@ -2892,18 +3279,18 @@ export function NavigationProvenanceView({
       : false;
     const redirectInferred = Boolean(
       action?.decision === "executed" &&
-        element?.href &&
-        action.beforeUrl &&
-        (action.afterUrl || state.url) &&
-        (() => {
-          try {
-            const expected = new URL(element.href, action.beforeUrl);
-            const actual = new URL(action.afterUrl || state.url);
-            return expected.href !== actual.href;
-          } catch {
-            return false;
-          }
-        })(),
+      element?.href &&
+      action.beforeUrl &&
+      (action.afterUrl || state.url) &&
+      (() => {
+        try {
+          const expected = new URL(element.href, action.beforeUrl);
+          const actual = new URL(action.afterUrl || state.url);
+          return expected.href !== actual.href;
+        } catch {
+          return false;
+        }
+      })(),
     );
     const category = action
       ? action.effectFlags.includes("open_new_tab") ||
@@ -3119,7 +3506,9 @@ export function CrossRouteConsistencyView({ data }: { data: RunData }) {
   const shared = [...families.entries()]
     .filter(([, family]) => family.routes.size > 1)
     .sort((a, b) => b[1].routes.size - a[1].routes.size);
-  const elementsById = new Map(data.elements.map((element) => [element.id, element]));
+  const elementsById = new Map(
+    data.elements.map((element) => [element.id, element]),
+  );
   const actionsByElement = new Map<string, ActionEdge[]>();
   for (const action of data.actions) {
     const list = actionsByElement.get(action.elementId) || [];
@@ -3128,15 +3517,29 @@ export function CrossRouteConsistencyView({ data }: { data: RunData }) {
   }
   const navigationControls = new Map<
     string,
-    Map<string, { label: string; outcomes: Set<string>; destinations: Set<string>; count: number }>
+    Map<
+      string,
+      {
+        label: string;
+        outcomes: Set<string>;
+        destinations: Set<string>;
+        count: number;
+      }
+    >
   >();
-  for (const component of data.components.filter((item) => item.kind === "navigation")) {
+  for (const component of data.components.filter(
+    (item) => item.kind === "navigation",
+  )) {
     const state = stateById.get(component.stateId);
     if (!state) continue;
     for (const elementId of component.elementIds) {
       const element = elementsById.get(elementId);
       if (!element) continue;
-      const rawLabel = element.accessibleName?.trim() || element.textSnippet?.trim() || element.href?.trim() || element.role;
+      const rawLabel =
+        element.accessibleName?.trim() ||
+        element.textSnippet?.trim() ||
+        element.href?.trim() ||
+        element.role;
       const label = rawLabel.replace(/\s+/g, " ");
       const identity = `${element.role.toLowerCase()}::${label.toLowerCase()}`;
       const route = stateRoute(state);
@@ -3158,8 +3561,12 @@ export function CrossRouteConsistencyView({ data }: { data: RunData }) {
               ? "Failed"
               : "Skipped",
         );
-        const destination = action.toStateId ? stateById.get(action.toStateId) : undefined;
-        row.destinations.add(destination ? stateRoute(destination) : "Destination unknown");
+        const destination = action.toStateId
+          ? stateById.get(action.toStateId)
+          : undefined;
+        row.destinations.add(
+          destination ? stateRoute(destination) : "Destination unknown",
+        );
       }
       routes.set(route, row);
       navigationControls.set(identity, routes);
@@ -3243,15 +3650,22 @@ export function CrossRouteConsistencyView({ data }: { data: RunData }) {
                     <td>{routes.size}</td>
                     <td>
                       <ul className="flv-consistency-route-list">
-                        {[...routes.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([route, value]) => (
-                          <li key={route}>
-                            <strong>{route}</strong>
-                            <span>{[...value.outcomes].sort().join(", ")}</span>
-                            <small>
-                              {value.count} captured instance{value.count === 1 ? "" : "s"}; destinations: {[...value.destinations].sort().join(", ") || "Unknown"}
-                            </small>
-                          </li>
-                        ))}
+                        {[...routes.entries()]
+                          .sort(([a], [b]) => a.localeCompare(b))
+                          .map(([route, value]) => (
+                            <li key={route}>
+                              <strong>{route}</strong>
+                              <span>
+                                {[...value.outcomes].sort().join(", ")}
+                              </span>
+                              <small>
+                                {value.count} captured instance
+                                {value.count === 1 ? "" : "s"}; destinations:{" "}
+                                {[...value.destinations].sort().join(", ") ||
+                                  "Unknown"}
+                              </small>
+                            </li>
+                          ))}
                       </ul>
                     </td>
                   </tr>
@@ -3465,77 +3879,198 @@ export function SessionPersistenceView({
     const browserEvidence = action.browserEvidence;
     for (const signal of action.signals) {
       const event = parseTabSignal(signal)?.event || signal;
-      if (event === "lifecycle:navigation:reload" || event === "navigation:reload")
+      if (
+        event === "lifecycle:navigation:reload" ||
+        event === "navigation:reload"
+      )
         cues.add("Captured reload");
       if (
         event === "lifecycle:navigation:back_forward" ||
         event === "navigation:back_forward" ||
-        ["history:back", "history:forward", "history:popstate"].includes(event) ||
+        ["history:back", "history:forward", "history:popstate"].includes(
+          event,
+        ) ||
         event.startsWith("history:go:")
-      ) cues.add("Captured history restoration");
+      )
+        cues.add("Captured history restoration");
     }
     for (const event of browserEvidence?.events || []) {
-      if (event.kind === "navigation_start" && event.navigationType === "reload") cues.add("Chromium reload navigation");
-      if (event.kind === "navigation_start" && (event.navigationType === "historySameDocument" || event.navigationType === "historyDifferentDocument")) cues.add("Chromium history traversal");
-      if (event.kind === "navigation_request" && event.navigationReason === "reload") cues.add("Chromium reload request");
+      if (
+        event.kind === "navigation_start" &&
+        event.navigationType === "reload"
+      )
+        cues.add("Chromium reload navigation");
+      if (
+        event.kind === "navigation_start" &&
+        (event.navigationType === "historySameDocument" ||
+          event.navigationType === "historyDifferentDocument")
+      )
+        cues.add("Chromium history traversal");
+      if (
+        event.kind === "navigation_request" &&
+        event.navigationReason === "reload"
+      )
+        cues.add("Chromium reload request");
     }
     const before = browserEvidence?.before;
     const after = browserEvidence?.after;
-    const storageChanges = before && after ? {
-      local: before.localStorageEntryCount == null || after.localStorageEntryCount == null ? undefined : after.localStorageEntryCount - before.localStorageEntryCount,
-      session: before.sessionStorageEntryCount == null || after.sessionStorageEntryCount == null ? undefined : after.sessionStorageEntryCount - before.sessionStorageEntryCount,
-      cookies: before.cookieCount == null || after.cookieCount == null ? undefined : after.cookieCount - before.cookieCount,
-    } : undefined;
-    if (storageChanges && Object.values(storageChanges).some((value) => value !== undefined && value !== 0)) cues.add("Browser storage counts changed");
+    const storageChanges =
+      before && after
+        ? {
+            local:
+              before.localStorageEntryCount == null ||
+              after.localStorageEntryCount == null
+                ? undefined
+                : after.localStorageEntryCount - before.localStorageEntryCount,
+            session:
+              before.sessionStorageEntryCount == null ||
+              after.sessionStorageEntryCount == null
+                ? undefined
+                : after.sessionStorageEntryCount -
+                  before.sessionStorageEntryCount,
+            cookies:
+              before.cookieCount == null || after.cookieCount == null
+                ? undefined
+                : after.cookieCount - before.cookieCount,
+          }
+        : undefined;
+    if (
+      storageChanges &&
+      Object.values(storageChanges).some(
+        (value) => value !== undefined && value !== 0,
+      )
+    )
+      cues.add("Browser storage counts changed");
     const isolatedProbe = browserEvidence?.isolatedContextPersistence;
-    if (isolatedProbe) cues.add("Storage imported into an isolated browser context");
+    if (isolatedProbe)
+      cues.add("Storage imported into an isolated browser context");
     if (!cues.size) return [];
     const source = states.get(action.fromStateId);
-    const destination = action.toStateId ? states.get(action.toStateId) : undefined;
+    const destination = action.toStateId
+      ? states.get(action.toStateId)
+      : undefined;
     const linked = Boolean(source?.fingerprint && destination?.fingerprint);
     const sameFingerprint = linked
       ? source!.fingerprint === destination!.fingerprint
       : undefined;
-    return [{ action, cues: [...cues], source, destination, sameFingerprint, storageChanges, isolatedProbe }];
+    return [
+      {
+        action,
+        cues: [...cues],
+        source,
+        destination,
+        sameFingerprint,
+        storageChanges,
+        isolatedProbe,
+      },
+    ];
   });
   return (
     <section className="flv" aria-labelledby="flv-session-title">
       <header className="flv-heading">
         <div>
           <h2 id="flv-session-title">Session persistence cues</h2>
-          <p>Compare linked source and destination fingerprints after a captured reload or browser-history restoration cue.</p>
+          <p>
+            Compare linked source and destination fingerprints after a captured
+            reload or browser-history restoration cue.
+          </p>
         </div>
       </header>
       <Notice tone="caution">
         Chromium navigation events distinguish reloads and same or different
         document history traversals. Value-free storage counts show whether
         local/session storage or cookies changed during the action. For reload
-        and history traversals, the worker also checks whether local-storage
-        and cookie counts can be imported into an isolated browser context.
-        Stored values are never retained in the result. This still cannot prove
+        and history traversals, the worker also checks whether local-storage and
+        cookie counts can be imported into an isolated browser context. Stored
+        values are never retained in the result. This still cannot prove
         server-side continuity or persistence after a browser restart.
       </Notice>
       {restorations.length ? (
         <div className="flv-annotation-list">
-          {restorations.map(({ action, cues, source, destination, sameFingerprint, storageChanges, isolatedProbe }) => (
-            <article key={action.id}>
-              <div>{cues.map((cue) => <span className="flv-review-status open" key={cue}>{cue}</span>)}</div>
-              <strong>{sameFingerprint === undefined ? "Unknown — state link missing" : sameFingerprint ? "Same fingerprint observed" : "Different fingerprint observed"}</strong>
-              <p>{action.action} {action.targetName || "recorded action"}</p>
-              {storageChanges && <p>Storage entry-count delta · local {storageChanges.local ?? "unknown"} · session {storageChanges.session ?? "unknown"} · cookies {storageChanges.cookies ?? "unknown"}. Count changes alone do not identify an application session state.</p>}
-              {isolatedProbe && <p>Isolated-context restore counts · local storage {isolatedProbe.localStorageEntryCount} → {isolatedProbe.restoredLocalStorageEntryCount} entries · cookies {isolatedProbe.cookieCount} → {isolatedProbe.restoredCookieCount} · {isolatedProbe.origin}</p>}
-              <div className="flv-annotation-actions">
-                {source ? <button type="button" onClick={() => onSelect({ kind: "state", id: source.id })}>Open source state</button> : <span>Source state unknown</span>}
-                {destination ? <button type="button" onClick={() => onSelect({ kind: "state", id: destination.id })}>Open resulting state</button> : <span>Destination state unknown</span>}
-                <button type="button" onClick={() => onSelect({ kind: "action", id: action.id })}>Open captured action</button>
-              </div>
-            </article>
-          ))}
+          {restorations.map(
+            ({
+              action,
+              cues,
+              source,
+              destination,
+              sameFingerprint,
+              storageChanges,
+              isolatedProbe,
+            }) => (
+              <article key={action.id}>
+                <div>
+                  {cues.map((cue) => (
+                    <span className="flv-review-status open" key={cue}>
+                      {cue}
+                    </span>
+                  ))}
+                </div>
+                <strong>
+                  {sameFingerprint === undefined
+                    ? "Unknown — state link missing"
+                    : sameFingerprint
+                      ? "Same fingerprint observed"
+                      : "Different fingerprint observed"}
+                </strong>
+                <p>
+                  {action.action} {action.targetName || "recorded action"}
+                </p>
+                {storageChanges && (
+                  <p>
+                    Storage entry-count delta · local{" "}
+                    {storageChanges.local ?? "unknown"} · session{" "}
+                    {storageChanges.session ?? "unknown"} · cookies{" "}
+                    {storageChanges.cookies ?? "unknown"}. Count changes alone
+                    do not identify an application session state.
+                  </p>
+                )}
+                {isolatedProbe && (
+                  <p>
+                    Isolated-context restore counts · local storage{" "}
+                    {isolatedProbe.localStorageEntryCount} →{" "}
+                    {isolatedProbe.restoredLocalStorageEntryCount} entries ·
+                    cookies {isolatedProbe.cookieCount} →{" "}
+                    {isolatedProbe.restoredCookieCount} · {isolatedProbe.origin}
+                  </p>
+                )}
+                <div className="flv-annotation-actions">
+                  {source ? (
+                    <button
+                      type="button"
+                      onClick={() => onSelect({ kind: "state", id: source.id })}
+                    >
+                      Open source state
+                    </button>
+                  ) : (
+                    <span>Source state unknown</span>
+                  )}
+                  {destination ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        onSelect({ kind: "state", id: destination.id })
+                      }
+                    >
+                      Open resulting state
+                    </button>
+                  ) : (
+                    <span>Destination state unknown</span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => onSelect({ kind: "action", id: action.id })}
+                  >
+                    Open captured action
+                  </button>
+                </div>
+              </article>
+            ),
+          )}
         </div>
       ) : (
         <div className="flv-empty">
-          This run has no linked action with a captured reload or history-restoration cue.
-          Persistence status is unknown.
+          This run has no linked action with a captured reload or
+          history-restoration cue. Persistence status is unknown.
         </div>
       )}
     </section>
@@ -3553,45 +4088,84 @@ export function BrowserHistoryView({
       ...action.signals.flatMap((raw) => {
         const parsed = parseTabSignal(raw);
         if (!parsed || !parsed.event.startsWith("history:")) return [];
-        return [{
-          action,
-          tabId: parsed.tabId,
-          event: `Page History API · ${parsed.event.slice("history:".length)}`,
-          offsetMs: 0,
-        }];
+        return [
+          {
+            action,
+            tabId: parsed.tabId,
+            event: `Page History API · ${parsed.event.slice("history:".length)}`,
+            offsetMs: 0,
+          },
+        ];
       }),
       ...(action.browserEvidence?.events || []).flatMap((item) => {
-        if (item.kind === "navigation_request") return [{ action, tabId: item.tabId || "tab unknown", offsetMs: item.offsetMs, event: `Renderer navigation request · ${item.navigationReason || "reason unknown"} · ${item.disposition || "disposition unknown"}` }];
+        if (item.kind === "navigation_request")
+          return [
+            {
+              action,
+              tabId: item.tabId || "tab unknown",
+              offsetMs: item.offsetMs,
+              event: `Renderer navigation request · ${item.navigationReason || "reason unknown"} · ${item.disposition || "disposition unknown"}`,
+            },
+          ];
         if (item.kind === "navigation_start") {
-          const beforeIndex = action.browserEvidence?.before.navigationEntryIndex;
+          const beforeIndex =
+            action.browserEvidence?.before.navigationEntryIndex;
           const afterIndex = action.browserEvidence?.after.navigationEntryIndex;
-          const delta = beforeIndex == null || afterIndex == null ? undefined : afterIndex - beforeIndex;
-          const direction = item.navigationType?.startsWith("history") && delta !== undefined
-            ? delta < 0 ? " · Back candidate" : delta > 0 ? " · Forward candidate" : " · history index unchanged"
-            : "";
-          return [{ action, tabId: item.tabId || "tab unknown", offsetMs: item.offsetMs, event: `Chromium navigation · ${item.navigationType || "type unknown"}${direction}` }];
+          const delta =
+            beforeIndex == null || afterIndex == null
+              ? undefined
+              : afterIndex - beforeIndex;
+          const direction =
+            item.navigationType?.startsWith("history") && delta !== undefined
+              ? delta < 0
+                ? " · Back candidate"
+                : delta > 0
+                  ? " · Forward candidate"
+                  : " · history index unchanged"
+              : "";
+          return [
+            {
+              action,
+              tabId: item.tabId || "tab unknown",
+              offsetMs: item.offsetMs,
+              event: `Chromium navigation · ${item.navigationType || "type unknown"}${direction}`,
+            },
+          ];
         }
-        if (item.kind === "redirect") return [{ action, tabId: item.tabId || "tab unknown", offsetMs: item.offsetMs, event: `Redirect response · HTTP ${item.status || "unknown"} · ${item.origin || "origin unknown"}` }];
+        if (item.kind === "redirect")
+          return [
+            {
+              action,
+              tabId: item.tabId || "tab unknown",
+              offsetMs: item.offsetMs,
+              event: `Redirect response · HTTP ${item.status || "unknown"} · ${item.origin || "origin unknown"}`,
+            },
+          ];
         return [];
       }),
     ])
     .sort(
-      (a, b) => dateValue(a.action.createdAt) - dateValue(b.action.createdAt) || a.offsetMs - b.offsetMs,
+      (a, b) =>
+        dateValue(a.action.createdAt) - dateValue(b.action.createdAt) ||
+        a.offsetMs - b.offsetMs,
     );
   return (
     <section className="flv" aria-labelledby="flv-history-title">
       <header className="flv-heading">
         <div>
           <h2 id="flv-history-title">Page history API activity</h2>
-          <p>Inspect page History API calls alongside Chromium navigation reasons, history traversals, reloads, and redirect responses.</p>
+          <p>
+            Inspect page History API calls alongside Chromium navigation
+            reasons, history traversals, reloads, and redirect responses.
+          </p>
         </div>
         <span className="flv-heading-count">{events.length} signals</span>
       </header>
       <Notice tone="caution">
-        Page History API calls are distinct from Chromium navigation types.
-        A history traversal or reload can be captured even when page code did
-        not call the History API, but the event does not identify a physical
-        browser toolbar button. Tab IDs last only within one worker action.
+        Page History API calls are distinct from Chromium navigation types. A
+        history traversal or reload can be captured even when page code did not
+        call the History API, but the event does not identify a physical browser
+        toolbar button. Tab IDs last only within one worker action.
       </Notice>
       {events.length ? (
         <ol className="flv-history-events">
@@ -3615,7 +4189,8 @@ export function BrowserHistoryView({
         </ol>
       ) : (
         <div className="flv-empty">
-          No page History API or Chromium navigation events were recorded in this run.
+          No page History API or Chromium navigation events were recorded in
+          this run.
         </div>
       )}
     </section>
@@ -3628,28 +4203,38 @@ export function MultiTabFlowView({
   data: RunData;
   onSelect: (selection: LifecycleSelection) => void;
 }) {
-  const events = data.actions.flatMap((action) =>
-    [
-      ...action.signals.flatMap((raw) => {
+  const events = data.actions.flatMap((action) => [
+    ...action.signals.flatMap((raw) => {
       const parsed = parseTabSignal(raw);
       if (!parsed || !["popup_opened", "popup_active"].includes(parsed.event))
         return [];
-      return [{ action, ...parsed, parentTabId: undefined as string | undefined }];
-      }),
-      ...(action.browserEvidence?.events || []).flatMap((event) =>
-        ["tab_opened", "tab_activated", "tab_closed"].includes(event.kind)
-          ? [{ action, tabId: event.tabId || "tab unknown", event: event.kind, parentTabId: event.parentTabId }]
-          : [],
-      ),
-    ],
-  );
+      return [
+        { action, ...parsed, parentTabId: undefined as string | undefined },
+      ];
+    }),
+    ...(action.browserEvidence?.events || []).flatMap((event) =>
+      ["tab_opened", "tab_activated", "tab_closed"].includes(event.kind)
+        ? [
+            {
+              action,
+              tabId: event.tabId || "tab unknown",
+              event: event.kind,
+              parentTabId: event.parentTabId,
+            },
+          ]
+        : [],
+    ),
+  ]);
   const byAction = new Map<string, typeof events>();
   for (const event of events)
     byAction.set(event.action.id, [
       ...(byAction.get(event.action.id) || []),
       event,
     ]);
-  const tabLineages = new Map<string, { parent?: string; states: AppState[]; actions: ActionEdge[] }>();
+  const tabLineages = new Map<
+    string,
+    { parent?: string; states: AppState[]; actions: ActionEdge[] }
+  >();
   const lineageFor = (id: string, parent?: string) => {
     const row = tabLineages.get(id) || { parent, states: [], actions: [] };
     if (!row.parent && parent) row.parent = parent;
@@ -3657,7 +4242,12 @@ export function MultiTabFlowView({
     return row;
   };
   const addLineageState = (id: string, state?: AppState) => {
-    if (state && !lineageFor(id, state.browserTabParentId).states.some((item) => item.id === state.id))
+    if (
+      state &&
+      !lineageFor(id, state.browserTabParentId).states.some(
+        (item) => item.id === state.id,
+      )
+    )
       lineageFor(id, state.browserTabParentId).states.push(state);
   };
   for (const state of data.states) {
@@ -3671,8 +4261,13 @@ export function MultiTabFlowView({
     lineageFor(evidence.sourceTabId).actions.push(action);
     addLineageState(evidence.sourceTabId, stateById.get(action.fromStateId));
     if (evidence.activeTabId !== evidence.sourceTabId) {
-      lineageFor(evidence.activeTabId, evidence.activeTabParentId).actions.push(action);
-      addLineageState(evidence.activeTabId, action.toStateId ? stateById.get(action.toStateId) : undefined);
+      lineageFor(evidence.activeTabId, evidence.activeTabParentId).actions.push(
+        action,
+      );
+      addLineageState(
+        evidence.activeTabId,
+        action.toStateId ? stateById.get(action.toStateId) : undefined,
+      );
     } else if (action.toStateId) {
       addLineageState(evidence.activeTabId, stateById.get(action.toStateId));
     }
@@ -3682,9 +4277,14 @@ export function MultiTabFlowView({
       <header className="flv-heading">
         <div>
           <h2 id="flv-multitab-title">Popup and tab handoffs</h2>
-          <p>Trace popup handoffs and follow logical tab lineages across restored action tasks.</p>
+          <p>
+            Trace popup handoffs and follow logical tab lineages across restored
+            action tasks.
+          </p>
         </div>
-        <span className="flv-heading-count">{tabLineages.size} logical tabs · {events.length} tab events</span>
+        <span className="flv-heading-count">
+          {tabLineages.size} logical tabs · {events.length} tab events
+        </span>
       </header>
       <Notice tone="caution">
         Logical tab IDs connect states and actions across discovery tasks; they
@@ -3693,16 +4293,58 @@ export function MultiTabFlowView({
         still opens an isolated browser context for each action, so this does
         not represent a continuously open real browser window.
       </Notice>
-      {tabLineages.size > 0 && <section className="flv-list-panel flv-multitab-lineages">
-        <h3>Logical tab journeys</h3>
-        {[...tabLineages.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([tabId, row]) => <article key={tabId}>
-          <header><strong>{tabId}</strong><small>{row.parent ? `opened from ${row.parent}` : "entry tab"} · {row.states.length} recorded states · {row.actions.length} linked action records</small></header>
-          <ol>{row.states.sort((a, b) => dateValue(a.discoveredAt) - dateValue(b.discoveredAt)).map((state) => <li key={state.id}>
-            <button type="button" onClick={() => onSelect({ kind: "state", id: state.id })}>{stateName(state)}<small>{stateRoute(state)}</small></button>
-            {state.provenanceActionId && <button type="button" onClick={() => onSelect({ kind: "action", id: state.provenanceActionId! })}>Reached by action</button>}
-          </li>)}</ol>
-        </article>)}
-      </section>}
+      {tabLineages.size > 0 && (
+        <section className="flv-list-panel flv-multitab-lineages">
+          <h3>Logical tab journeys</h3>
+          {[...tabLineages.entries()]
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([tabId, row]) => (
+              <article key={tabId}>
+                <header>
+                  <strong>{tabId}</strong>
+                  <small>
+                    {row.parent ? `opened from ${row.parent}` : "entry tab"} ·{" "}
+                    {row.states.length} recorded states · {row.actions.length}{" "}
+                    linked action records
+                  </small>
+                </header>
+                <ol>
+                  {row.states
+                    .sort(
+                      (a, b) =>
+                        dateValue(a.discoveredAt) - dateValue(b.discoveredAt),
+                    )
+                    .map((state) => (
+                      <li key={state.id}>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onSelect({ kind: "state", id: state.id })
+                          }
+                        >
+                          {stateName(state)}
+                          <small>{stateRoute(state)}</small>
+                        </button>
+                        {state.provenanceActionId && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              onSelect({
+                                kind: "action",
+                                id: state.provenanceActionId!,
+                              })
+                            }
+                          >
+                            Reached by action
+                          </button>
+                        )}
+                      </li>
+                    ))}
+                </ol>
+              </article>
+            ))}
+        </section>
+      )}
       {byAction.size ? (
         <div className="flv-multitab-list">
           {[...byAction.entries()].map(([actionId, items]) => {
@@ -3716,14 +4358,19 @@ export function MultiTabFlowView({
                   <time>{showTime(action.createdAt)}</time>
                 </header>
                 <div className="flv-multitab-handoff">
-            <span className="flv-tab-chip">Action source</span>
+                  <span className="flv-tab-chip">Action source</span>
                   <ArrowRight size={13} />
                   {items.map((item, index) => (
                     <React.Fragment
                       key={`${item.tabId}:${item.event}:${index}`}
                     >
                       <span className={`flv-tab-chip ${item.event}`}>
-                        {item.event === "popup_opened" || item.event === "tab_opened" ? "Opened" : item.event === "tab_closed" ? "Closed" : "Activated"}{" "}
+                        {item.event === "popup_opened" ||
+                        item.event === "tab_opened"
+                          ? "Opened"
+                          : item.event === "tab_closed"
+                            ? "Closed"
+                            : "Activated"}{" "}
                         · {item.tabId}
                         {item.parentTabId ? ` · from ${item.parentTabId}` : ""}
                       </span>
@@ -3857,11 +4504,20 @@ export function FlowLifecycleHub({
     : comparisonRuns.map((run) => run.run);
   const choices = choiceIndex.filter((run) => run.id !== data.run.id);
   const compatibleRuns = availableRuns
-    .filter((run) => run.id !== data.run.id && run.projectId === data.run.projectId)
-    .filter((run) => (run.config.roleLabel || "") === (data.run.config.roleLabel || "") && (run.config.localeLabel || "") === (data.run.config.localeLabel || ""))
+    .filter(
+      (run) => run.id !== data.run.id && run.projectId === data.run.projectId,
+    )
+    .filter(
+      (run) =>
+        (run.config.roleLabel || "") === (data.run.config.roleLabel || "") &&
+        (run.config.localeLabel || "") === (data.run.config.localeLabel || ""),
+    )
     .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
     .slice(0, 4);
-  const history = [data, ...repeatabilityRuns.filter((run) => run.run.id !== data.run.id)];
+  const history = [
+    data,
+    ...repeatabilityRuns.filter((run) => run.run.id !== data.run.id),
+  ];
   const [earlier, later] =
     selectedRun &&
     Date.parse(selectedRun.run.createdAt) <= Date.parse(data.run.createdAt)
@@ -3970,12 +4626,14 @@ export function FlowLifecycleHub({
             detail="Load a second discovery with matching action or API records that include durations."
           />
         ))}
-      {subview === "repeatability" && <RepeatabilityView
-        runs={history}
-        candidates={compatibleRuns}
-        selectedRunIds={repeatabilityRunIds}
-        onSelectionChange={onRepeatabilityRunsChange}
-      />}
+      {subview === "repeatability" && (
+        <RepeatabilityView
+          runs={history}
+          candidates={compatibleRuns}
+          selectedRunIds={repeatabilityRunIds}
+          onSelectionChange={onRepeatabilityRunsChange}
+        />
+      )}
       {subview === "responsive" && <ResponsiveComparisonView runs={history} />}
       {subview === "freshness" && (
         <EvidenceFreshnessView data={data} onSelect={onSelect} />

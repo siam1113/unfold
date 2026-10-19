@@ -400,7 +400,10 @@
   background: #fbfcfe;
 }
 .wql-recovery-link {
-  grid-template-columns: minmax(130px, max-content) minmax(0, 1fr) minmax(80px, max-content);
+  grid-template-columns: minmax(130px, max-content) minmax(0, 1fr) minmax(
+      80px,
+      max-content
+    );
   padding-left: 26px;
   background: #f9fbfe;
 }
@@ -567,4 +570,155 @@
   .wql-form-action .wql-kind {
     grid-row: auto;
   }
+}
+
+/* --- Dark theme overrides (auto-generated contrast fix) --- */
+
+:root[data-theme="dark"] .workflow-quality-lens {
+  --wql-ink: var(--ink);
+  --wql-muted: var(--muted);
+  --wql-border: var(--line);
+  --wql-surface: var(--surface);
+  --wql-subtle: var(--muted);
+}
+:root[data-theme="dark"] .wql-eyebrow {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .wql-search input {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .wql-search > span:last-child {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .wql-mode-tabs {
+  background: var(--surface);
+}
+:root[data-theme="dark"] .wql-mode-tabs button {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .wql-mode-tabs button[aria-selected="true"] {
+  color: var(--ink);
+  background: var(--surface);
+}
+:root[data-theme="dark"] .wql-metric strong {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .wql-metric span {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .wql-metric small {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .wql-note {
+  color: var(--ink);
+  background: var(--surface);
+  border-color: var(--line);
+}
+:root[data-theme="dark"] .wql-note strong {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .wql-card h3 {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .wql-row-button:hover {
+  background: var(--surface);
+}
+:root[data-theme="dark"] .wql-main strong {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .wql-kind {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .wql-kind.is-error {
+  color: #ffaaa1;
+}
+:root[data-theme="dark"] .wql-chip {
+  color: var(--ink);
+  background: var(--surface);
+  border-color: var(--line);
+}
+:root[data-theme="dark"] .wql-empty {
+  background: var(--surface);
+  border-color: var(--line);
+}
+:root[data-theme="dark"] .wql-empty strong {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .wql-empty p {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .wql-similarity b {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .wql-similarity i {
+  background: var(--button-hover);
+}
+:root[data-theme="dark"] .wql-impact-group > header > strong {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .wql-impact-routes span {
+  color: var(--ink);
+  border-color: var(--line);
+}
+:root[data-theme="dark"] .wql-empty-inline {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .wql-validation-flags {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .wql-validity-transition {
+  background: var(--surface);
+}
+:root[data-theme="dark"] .wql-validity-transition .wql-main strong {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .wql-confidence-row .wql-kind {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .wql-form-action {
+  background: var(--surface);
+}
+:root[data-theme="dark"] .wql-recovery-link {
+  background: var(--surface);
+}
+:root[data-theme="dark"] .wql-recovery-history {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .wql-state-transition .wql-main small + small {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .wql-transition-delta + .wql-transition-delta {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .wql-search-action {
+  background: var(--surface);
+}
+:root[data-theme="dark"] .wql-search-evidence + .wql-search-evidence {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .wql-scenario-toggle {
+  color: var(--ink);
+  background: var(--surface);
+  border-color: var(--line);
+}
+:root[data-theme="dark"] .wql-scenario-toggle:hover {
+  background: var(--surface);
+  border-color: var(--line);
+}
+:root[data-theme="dark"] .wql-scenario-steps {
+  background: var(--surface);
+}
+:root[data-theme="dark"] .wql-scenario-step-number {
+  color: var(--ink);
+  background: var(--surface);
+  border-color: var(--line);
+}
+:root[data-theme="dark"] .wql-evidence-checks li {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .wql-evidence-checks li.is-present {
+  color: #8bd9bb;
+}
+:root[data-theme="dark"] .wql-evidence-checks li.is-missing {
+  color: #ffaaa1;
 }

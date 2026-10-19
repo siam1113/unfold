@@ -25,6 +25,15 @@ export function normalizeUrl(raw: string, config: ScanConfig): string {
       u.searchParams.set(key, "[redacted]");
   }
   u.searchParams.sort();
+  // A bare trailing "#" (common for JS-driven tabs/buttons coded as
+  // `href="#"`) parses to the same empty .hash as "no fragment at all", but
+  // serializes differently — "x#" vs "x" — so it was reaching the
+  // fingerprint as a distinct URL and making every such click look like a
+  // brand-new, never-seen page. Re-assigning .hash to its own getter value
+  // is a no-op for a real route fragment (e.g. "#/patients") but collapses
+  // the meaningless bare "#" down to no fragment, since the setter treats
+  // re-setting to "" as clearing it.
+  u.hash = u.hash;
   return u.toString();
 }
 export function stableText(text: string): string {

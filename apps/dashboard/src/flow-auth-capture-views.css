@@ -1,0 +1,109 @@
+.auth-capture-modal {
+  max-width: 460px;
+}
+.auth-capture-summary {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: #1f8a5a;
+}
+.auth-capture-summary strong {
+  display: block;
+  font-size: 13px;
+  color: var(--ink, #25364d);
+}
+.auth-capture-summary p {
+  margin: 3px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.auth-capture-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+/* Specificity note: .auth-capture-row is a <label>, and this wizard's
+   .scan-modal label { display:block; font-weight:600; color:var(--ink);
+   margin-bottom:18px } (styles.css) outranks a bare single-class selector —
+   so this rule is qualified with its flex-column parent to win on
+   specificity, and explicitly resets every property that global rule sets,
+   not just the ones this component cares about. */
+.auth-capture-list .auth-capture-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  cursor: pointer;
+  font-weight: 400;
+  color: inherit;
+  margin-bottom: 0;
+}
+.auth-capture-row.selected {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+}
+/* Same story for the radio itself: .scan-modal input,select,textarea
+   (styles.css) turns every <input> in this wizard into a full-width boxed
+   field — explicitly undo that here so it stays a normal small radio. */
+.auth-capture-row input[type="radio"] {
+  flex: 0 0 auto;
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  margin: 0;
+  /* `revert` undoes .scan-modal input's border/background/border-radius
+     for just this element, instead of guessing replacement values — the
+     native radio rendering (and its :focus ring) comes back unmodified. */
+  border: revert;
+  background: revert;
+  border-radius: revert;
+}
+.auth-capture-row-body {
+  flex: 1;
+  min-width: 0;
+}
+.auth-capture-row-body strong {
+  display: block;
+  font-size: 12px;
+  color: var(--ink, #25364d);
+}
+.auth-capture-row-body small {
+  font-size: 11px;
+  color: var(--muted);
+}
+.form-row-stack {
+  display: block;
+  margin-bottom: 18px;
+}
+/* .form-row-label itself is styled globally in styles.css (shared with
+   every other field label in this wizard) — don't redefine it here with
+   different values, or this one field drifts out of sync with its
+   siblings depending on CSS bundle order. */
+.auth-capture-manual {
+  margin-top: 8px;
+}
+.auth-capture-manual summary {
+  font-size: 11px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.auth-capture-manual input {
+  display: block;
+  width: 100%;
+  border: 1px solid #dbe5f2;
+  background: #fcfdff;
+  border-radius: 7px;
+  padding: 11px 12px;
+  margin-top: 8px;
+  color: #7690b3;
+  font-size: 12px;
+}

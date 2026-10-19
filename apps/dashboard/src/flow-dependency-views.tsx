@@ -36,7 +36,9 @@ export function RouteApiMapView({ data, states }: Props) {
     { route: string; method: string; endpoint: string; calls: ApiCall[] }
   >();
   for (const call of data.apiCalls) {
-    const source = call.fromStateId ? stateById.get(call.fromStateId) : undefined;
+    const source = call.fromStateId
+      ? stateById.get(call.fromStateId)
+      : undefined;
     if (!source) continue;
     const endpoint = pathFor(call.url);
     const key = `${source.routeKey}\u0000${call.method}\u0000${endpoint}`;
@@ -50,7 +52,8 @@ export function RouteApiMapView({ data, states }: Props) {
     groups.set(key, group);
   }
   const rows = [...groups.values()].sort(
-    (a, b) => a.route.localeCompare(b.route) || a.endpoint.localeCompare(b.endpoint),
+    (a, b) =>
+      a.route.localeCompare(b.route) || a.endpoint.localeCompare(b.endpoint),
   );
   return (
     <div className="flow-dependency-scroll">
@@ -69,7 +72,10 @@ export function RouteApiMapView({ data, states }: Props) {
                 (call) => call.failed || (call.status || 0) >= 400,
               ).length;
               return (
-                <article className="flow-api-row" key={`${row.route}:${row.method}:${row.endpoint}`}>
+                <article
+                  className="flow-api-row"
+                  key={`${row.route}:${row.method}:${row.endpoint}`}
+                >
                   <span className="flow-api-route">
                     <Route size={13} /> {row.route}
                   </span>
@@ -96,7 +102,9 @@ export function RouteApiMapView({ data, states }: Props) {
                         {call.status ?? "—"}
                       </span>
                     ))}
-                    {row.calls.length > 6 && <small>+{row.calls.length - 6}</small>}
+                    {row.calls.length > 6 && (
+                      <small>+{row.calls.length - 6}</small>
+                    )}
                   </div>
                 </article>
               );
@@ -139,7 +147,8 @@ export function ActionRequestTraceView({ data, actions, onSelect }: Props) {
           <h2>Requests correlated to actions</h2>
           <p>
             Only calls carrying the action ID are assigned to an interaction.
-            Unlinked calls are listed separately so their trigger is not guessed.
+            Unlinked calls are listed separately so their trigger is not
+            guessed.
           </p>
         </header>
         <div className="flow-request-traces">
@@ -151,7 +160,9 @@ export function ActionRequestTraceView({ data, actions, onSelect }: Props) {
                   className="flow-request-trigger"
                   onClick={() => onSelect({ kind: "action", id: action.id })}
                 >
-                  <span>{source?.title || source?.routeKey || "Observed action"}</span>
+                  <span>
+                    {source?.title || source?.routeKey || "Observed action"}
+                  </span>
                   <strong>
                     {action.action} “{action.targetName || "Control"}”
                   </strong>
@@ -162,13 +173,18 @@ export function ActionRequestTraceView({ data, actions, onSelect }: Props) {
                     .sort((a, b) => a.sequence - b.sequence)
                     .map((call) => (
                       <li key={call.id}>
-                        <span className={methodTone(call.method)}>{call.method}</span>
+                        <span className={methodTone(call.method)}>
+                          {call.method}
+                        </span>
                         <strong title={call.url}>{pathFor(call.url)}</strong>
                         <span className={call.failed ? "failed" : ""}>
-                          {call.status ?? (call.failed ? "Failed" : "No status")}
+                          {call.status ??
+                            (call.failed ? "Failed" : "No status")}
                         </span>
                         <small>
-                          {call.durationMs == null ? "Timing unavailable" : `${Math.round(call.durationMs)} ms`}
+                          {call.durationMs == null
+                            ? "Timing unavailable"
+                            : `${Math.round(call.durationMs)} ms`}
                         </small>
                       </li>
                     ))}
@@ -180,7 +196,10 @@ export function ActionRequestTraceView({ data, actions, onSelect }: Props) {
         {unlinked.length > 0 && (
           <section className="flow-unlinked-calls">
             <h3>{unlinked.length} calls without an action link</h3>
-            <p>These requests have no recorded action ID, so their trigger is unknown.</p>
+            <p>
+              These requests have no recorded action ID, so their trigger is
+              unknown.
+            </p>
             <ul>
               {unlinked.slice(0, 30).map((call) => (
                 <li key={call.id}>
@@ -215,7 +234,8 @@ export function EvidenceTrailView({ data, states, actions, onSelect }: Props) {
   }
   const evidenceStates = states.filter(
     (state) =>
-      state.screenshotPath || (actionByState.get(state.id) || []).some((a) => a.evidencePaths.length),
+      state.screenshotPath ||
+      (actionByState.get(state.id) || []).some((a) => a.evidencePaths.length),
   );
   return (
     <div className="flow-dependency-scroll">
@@ -256,17 +276,25 @@ export function EvidenceTrailView({ data, states, actions, onSelect }: Props) {
                       <span>Open screen capture</span>
                     </a>
                   )}
-                  {stateActions.some((action) => action.evidencePaths.length) && (
+                  {stateActions.some(
+                    (action) => action.evidencePaths.length,
+                  ) && (
                     <ul>
                       {stateActions.flatMap((action) =>
                         action.evidencePaths.map((path) => (
                           <li key={`${action.id}:${path}`}>
                             <button
-                              onClick={() => onSelect({ kind: "action", id: action.id })}
+                              onClick={() =>
+                                onSelect({ kind: "action", id: action.id })
+                              }
                             >
                               {action.action} “{action.targetName || "Control"}”
                             </button>
-                            <a href={`/artifacts/${path}`} target="_blank" rel="noreferrer">
+                            <a
+                              href={`/artifacts/${path}`}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
                               {path.split("/").pop() || path}
                             </a>
                           </li>
@@ -282,11 +310,19 @@ export function EvidenceTrailView({ data, states, actions, onSelect }: Props) {
           <div className="flow-dependency-empty">
             <FileSearch size={20} />
             <strong>No evidence artifacts are available</strong>
-            <span>Try another filter or inspect whether screenshot and trace capture were enabled.</span>
+            <span>
+              Try another filter or inspect whether screenshot and trace capture
+              were enabled.
+            </span>
           </div>
         )}
         <small className="flow-evidence-count">
-          {data.apiCalls.filter((call) => call.fromStateId && stateIds.has(call.fromStateId)).length} related API calls are available in the request views.
+          {
+            data.apiCalls.filter(
+              (call) => call.fromStateId && stateIds.has(call.fromStateId),
+            ).length
+          }{" "}
+          related API calls are available in the request views.
         </small>
       </div>
     </div>
@@ -306,8 +342,19 @@ export function RunComparisonView({ data }: Props) {
         if (!response.ok) throw new Error("Could not load discoveries.");
         return response.json() as Promise<RunSummary[]>;
       })
-      .then((result) => alive && setRuns(result.filter((run) => run.id !== data.run.id)))
-      .catch((cause) => alive && setError(cause instanceof Error ? cause.message : "Could not load discoveries."));
+      .then(
+        (result) =>
+          alive && setRuns(result.filter((run) => run.id !== data.run.id)),
+      )
+      .catch(
+        (cause) =>
+          alive &&
+          setError(
+            cause instanceof Error
+              ? cause.message
+              : "Could not load discoveries.",
+          ),
+      );
     return () => {
       alive = false;
     };
@@ -325,13 +372,18 @@ export function RunComparisonView({ data }: Props) {
       signal: abort.signal,
     })
       .then((response) => {
-        if (!response.ok) throw new Error("Could not load the selected discovery.");
+        if (!response.ok)
+          throw new Error("Could not load the selected discovery.");
         return response.json() as Promise<RunData>;
       })
       .then(setComparison)
       .catch((cause) => {
         if (!abort.signal.aborted)
-          setError(cause instanceof Error ? cause.message : "Could not load the selected discovery.");
+          setError(
+            cause instanceof Error
+              ? cause.message
+              : "Could not load the selected discovery.",
+          );
       })
       .finally(() => !abort.signal.aborted && setLoading(false));
     return () => abort.abort();
@@ -340,12 +392,15 @@ export function RunComparisonView({ data }: Props) {
     if (!comparison) return [];
     const routeCounts = (run: RunData) => {
       const map = new Map<string, number>();
-      for (const state of run.states) map.set(state.routeKey, (map.get(state.routeKey) || 0) + 1);
+      for (const state of run.states)
+        map.set(state.routeKey, (map.get(state.routeKey) || 0) + 1);
       return map;
     };
     const currentRoutes = routeCounts(data);
     const otherRoutes = routeCounts(comparison);
-    const routes = [...new Set([...currentRoutes.keys(), ...otherRoutes.keys()])].sort();
+    const routes = [
+      ...new Set([...currentRoutes.keys(), ...otherRoutes.keys()]),
+    ].sort();
     return routes.map((route) => ({
       route,
       current: currentRoutes.get(route) || 0,
@@ -357,11 +412,17 @@ export function RunComparisonView({ data }: Props) {
       <div className="flow-dependency-document">
         <header className="flow-dependency-intro">
           <h2>Compare discoveries</h2>
-          <p>Compare observed screen counts by route between this run and another discovery.</p>
+          <p>
+            Compare observed screen counts by route between this run and another
+            discovery.
+          </p>
         </header>
         <label className="flow-compare-picker">
           Discovery to compare
-          <select value={selectedId} onChange={(event) => setSelectedId(event.target.value)}>
+          <select
+            value={selectedId}
+            onChange={(event) => setSelectedId(event.target.value)}
+          >
             <option value="">Choose a discovery</option>
             {runs.map((run) => (
               <option key={run.id} value={run.id}>
@@ -370,18 +431,35 @@ export function RunComparisonView({ data }: Props) {
             ))}
           </select>
         </label>
-        {loading && <p className="flow-compare-message">Loading discovery data…</p>}
-        {error && <p className="flow-compare-error" role="alert">{error}</p>}
+        {loading && (
+          <p className="flow-compare-message">Loading discovery data…</p>
+        )}
+        {error && (
+          <p className="flow-compare-error" role="alert">
+            {error}
+          </p>
+        )}
         {comparison && (
           <>
             <div className="flow-compare-summary">
-              <span>{data.run.name}: {data.states.length} screens, {data.actions.length} actions</span>
-              <span>{comparison.run.name}: {comparison.states.length} screens, {comparison.actions.length} actions</span>
+              <span>
+                {data.run.name}: {data.states.length} screens,{" "}
+                {data.actions.length} actions
+              </span>
+              <span>
+                {comparison.run.name}: {comparison.states.length} screens,{" "}
+                {comparison.actions.length} actions
+              </span>
             </div>
             <div className="flow-compare-table-wrap">
               <table>
                 <thead>
-                  <tr><th>Route</th><th>{data.run.name}</th><th>{comparison.run.name}</th><th>Change</th></tr>
+                  <tr>
+                    <th>Route</th>
+                    <th>{data.run.name}</th>
+                    <th>{comparison.run.name}</th>
+                    <th>Change</th>
+                  </tr>
                 </thead>
                 <tbody>
                   {summary.map((row) => (
@@ -389,8 +467,17 @@ export function RunComparisonView({ data }: Props) {
                       <th>{row.route}</th>
                       <td>{row.current}</td>
                       <td>{row.other}</td>
-                      <td className={row.other - row.current > 0 ? "positive" : row.other - row.current < 0 ? "negative" : ""}>
-                        {row.other - row.current > 0 ? "+" : ""}{row.other - row.current}
+                      <td
+                        className={
+                          row.other - row.current > 0
+                            ? "positive"
+                            : row.other - row.current < 0
+                              ? "negative"
+                              : ""
+                        }
+                      >
+                        {row.other - row.current > 0 ? "+" : ""}
+                        {row.other - row.current}
                       </td>
                     </tr>
                   ))}

@@ -188,16 +188,29 @@ const stateEvidenceScore = (
     browserActionCount > 0,
   ];
   return {
-    score: Math.round((evidence.filter(Boolean).length / evidence.length) * 100),
+    score: Math.round(
+      (evidence.filter(Boolean).length / evidence.length) * 100,
+    ),
     evidence,
   };
 };
 const historySignalsFor = (action: ActionEdge) =>
   action.signals
-    .filter((signal) => /(?:^|:)history:(pushState|replaceState|back|forward|go|popstate)(?::(-?\d+))?$/.test(signal))
-    .map((signal) => signal.match(/history:(pushState|replaceState|back|forward|go|popstate)(?::(-?\d+))?$/))
+    .filter((signal) =>
+      /(?:^|:)history:(pushState|replaceState|back|forward|go|popstate)(?::(-?\d+))?$/.test(
+        signal,
+      ),
+    )
+    .map((signal) =>
+      signal.match(
+        /history:(pushState|replaceState|back|forward|go|popstate)(?::(-?\d+))?$/,
+      ),
+    )
     .filter((match): match is RegExpMatchArray => Boolean(match))
-    .map((match) => `Page History API: ${match[1]}${match[2] ? ` (${match[2]})` : ""}`);
+    .map(
+      (match) =>
+        `Page History API: ${match[1]}${match[2] ? ` (${match[2]})` : ""}`,
+    );
 const matchingControlForTransition = (
   source: UIElement | undefined,
   destinationStateId: string,
@@ -210,9 +223,9 @@ const matchingControlForTransition = (
       return candidate.structuralSignature === source.structuralSignature;
     return Boolean(
       source.role.trim() &&
-        source.accessibleName.trim() &&
-        candidate.role === source.role &&
-        candidate.accessibleName === source.accessibleName,
+      source.accessibleName.trim() &&
+      candidate.role === source.role &&
+      candidate.accessibleName === source.accessibleName,
     );
   });
   return candidates.length === 1 ? candidates[0] : undefined;
@@ -221,7 +234,11 @@ const controlStateChanges = (
   before: UIElement | undefined,
   after: UIElement | undefined,
 ) => {
-  const fields: [string, string | boolean | undefined, string | boolean | undefined][] = [
+  const fields: [
+    string,
+    string | boolean | undefined,
+    string | boolean | undefined,
+  ][] = [
     ["expanded", before?.expanded, after?.expanded],
     ["selected", before?.selected, after?.selected],
     ["has popup", before?.hasPopup, after?.hasPopup],
@@ -265,7 +282,9 @@ const regionCueChanges = (
     if (!oldCount && newCount)
       changes.push(kind + " appeared in captured snapshot");
     else if (oldCount && !newCount)
-      changes.push(kind + " closed or was no longer listed in captured snapshot");
+      changes.push(
+        kind + " closed or was no longer listed in captured snapshot",
+      );
     else changes.push(kind + " cue count: " + oldCount + " → " + newCount);
   }
   return changes.length ? changes : ["No captured region cue change"];
@@ -405,22 +424,32 @@ export function WorkflowQualityLens({
       const validityTransitions = actions.flatMap((action) => {
         if (!action.toStateId) return [];
         const sourceFields = fields.filter(
-          (field) => field.stateId === action.fromStateId && field.validationEvidence,
+          (field) =>
+            field.stateId === action.fromStateId && field.validationEvidence,
         );
-        const destinationFields = fields.filter((field) => field.stateId === action.toStateId);
+        const destinationFields = fields.filter(
+          (field) => field.stateId === action.toStateId,
+        );
         return sourceFields.flatMap((sourceField) => {
           if (!sourceField.accessibleName.trim()) return [];
           const destinationField = destinationFields.find(
-            (field) => fieldIdentity(field) === fieldIdentity(sourceField) && field.validationEvidence,
+            (field) =>
+              fieldIdentity(field) === fieldIdentity(sourceField) &&
+              field.validationEvidence,
           );
-          return destinationField ? [{ action, sourceField, destinationField }] : [];
+          return destinationField
+            ? [{ action, sourceField, destinationField }]
+            : [];
         });
       });
       const browserFormActions = actions.filter((action) => {
         const evidence = action.browserEvidence;
-        return evidence && (
-          evidence.before.formCount > 0 || evidence.after.formCount > 0 ||
-          evidence.before.fieldCount > 0 || evidence.after.fieldCount > 0
+        return (
+          evidence &&
+          (evidence.before.formCount > 0 ||
+            evidence.after.formCount > 0 ||
+            evidence.before.fieldCount > 0 ||
+            evidence.after.fieldCount > 0)
         );
       });
       const byForm = new Map<string, UIElement[]>();
@@ -493,14 +522,50 @@ export function WorkflowQualityLens({
           {browserFormActions.length > 0 && (
             <div className="wql-card">
               <h3>Browser-observed form snapshots</h3>
-              <p className="wql-note">These aggregate before/after counts are captured directly around each action, including forms or fields the control inventory did not successfully identify. Constraint reasons are native browser validity flags; custom business rules remain unobservable. No value or message text is stored.</p>
+              <p className="wql-note">
+                These aggregate before/after counts are captured directly around
+                each action, including forms or fields the control inventory did
+                not successfully identify. Constraint reasons are native browser
+                validity flags; custom business rules remain unobservable. No
+                value or message text is stored.
+              </p>
               {browserFormActions.slice(0, 100).map((action) => {
                 const evidence = action.browserEvidence!;
-                const reasons = Object.entries(evidence.after.invalidReasons).filter(([, count]) => count > 0).map(([reason, count]) => `${reason}: ${count}`);
-                return <Selectable key={action.id} kind="action" id={action.id} onSelect={onSelect} className="wql-row-button">
-                  <span className={`wql-kind ${action.decision === "failed" ? "is-error" : ""}`}>{action.decision.replaceAll("_", " ")}</span>
-                  <span className="wql-main"><strong>{action.action} · {action.targetName || "unnamed control"}</strong><small>{evidence.before.formCount} → {evidence.after.formCount} forms · {evidence.before.fieldCount} → {evidence.after.fieldCount} visible fields · {evidence.before.invalidFieldCount} → {evidence.after.invalidFieldCount} invalid</small><small>After action validity reasons: {reasons.join(" · ") || "none recorded"}</small></span>
-                </Selectable>;
+                const reasons = Object.entries(evidence.after.invalidReasons)
+                  .filter(([, count]) => count > 0)
+                  .map(([reason, count]) => `${reason}: ${count}`);
+                return (
+                  <Selectable
+                    key={action.id}
+                    kind="action"
+                    id={action.id}
+                    onSelect={onSelect}
+                    className="wql-row-button"
+                  >
+                    <span
+                      className={`wql-kind ${action.decision === "failed" ? "is-error" : ""}`}
+                    >
+                      {action.decision.replaceAll("_", " ")}
+                    </span>
+                    <span className="wql-main">
+                      <strong>
+                        {action.action} ·{" "}
+                        {action.targetName || "unnamed control"}
+                      </strong>
+                      <small>
+                        {evidence.before.formCount} → {evidence.after.formCount}{" "}
+                        forms · {evidence.before.fieldCount} →{" "}
+                        {evidence.after.fieldCount} visible fields ·{" "}
+                        {evidence.before.invalidFieldCount} →{" "}
+                        {evidence.after.invalidFieldCount} invalid
+                      </small>
+                      <small>
+                        After action validity reasons:{" "}
+                        {reasons.join(" · ") || "none recorded"}
+                      </small>
+                    </span>
+                  </Selectable>
+                );
               })}
             </div>
           )}
@@ -681,25 +746,84 @@ export function WorkflowQualityLens({
           <div className="wql-card">
             <h3>Native validity transitions</h3>
             <div className="wql-note">
-              Compares boolean native validity snapshots for a field matched by captured accessible name, role, and field type across an observed action. Failed submissions, subsequent corrections, and retries are shown only where action and state records link them. Custom or business validation remains unknown. Values and validation messages are never displayed.
+              Compares boolean native validity snapshots for a field matched by
+              captured accessible name, role, and field type across an observed
+              action. Failed submissions, subsequent corrections, and retries
+              are shown only where action and state records link them. Custom or
+              business validation remains unknown. Values and validation
+              messages are never displayed.
             </div>
-            {validityTransitions.length ? validityTransitions
-              .filter(({ action, sourceField }) => textMatch([sourceField.accessibleName, action.targetName, routeOf(stateById.get(action.fromStateId))], normalizedQuery))
-              .slice(0, 100)
-              .map(({ action, sourceField, destinationField }) => {
-                const submit = data.elements.some((element) => element.id === action.elementId && element.isSubmit);
-                const task = data.tasks.find((item) => item.stateId === action.fromStateId && item.elementId === action.elementId);
-                return (
-                  <Selectable key={`${action.id}:${sourceField.id}`} kind="action" id={action.id} onSelect={onSelect} className="wql-row-button wql-validity-transition">
-                    <span className={`wql-kind ${action.decision === "failed" ? "is-error" : ""}`}>{submit ? "Submit" : action.action}</span>
-                    <span className="wql-main">
-                      <strong>{sourceField.accessibleName || "Field name not captured"} · {nativeValidityLabel(sourceField)} → {nativeValidityLabel(destinationField)}</strong>
-                      <small>{routeOf(stateById.get(action.fromStateId))} → {stateLabel(stateById.get(destinationField.stateId))} · {action.decision.replaceAll("_", " ")}{submit && action.decision === "failed" ? " · failed submission observed" : ""}{task && task.attempts > 1 ? ` · ${task.attempts} task attempts recorded` : ""}</small>
-                    </span>
-                    <span className="wql-chip">{sourceField.validationEvidence?.willValidate && destinationField.validationEvidence?.willValidate ? "Native validity" : "Applicability differs"}</span>
-                  </Selectable>
-                );
-              }) : <p className="wql-empty-inline">No matched source and destination validity snapshots were recorded across an action. This does not mean validation is absent.</p>}
+            {validityTransitions.length ? (
+              validityTransitions
+                .filter(({ action, sourceField }) =>
+                  textMatch(
+                    [
+                      sourceField.accessibleName,
+                      action.targetName,
+                      routeOf(stateById.get(action.fromStateId)),
+                    ],
+                    normalizedQuery,
+                  ),
+                )
+                .slice(0, 100)
+                .map(({ action, sourceField, destinationField }) => {
+                  const submit = data.elements.some(
+                    (element) =>
+                      element.id === action.elementId && element.isSubmit,
+                  );
+                  const task = data.tasks.find(
+                    (item) =>
+                      item.stateId === action.fromStateId &&
+                      item.elementId === action.elementId,
+                  );
+                  return (
+                    <Selectable
+                      key={`${action.id}:${sourceField.id}`}
+                      kind="action"
+                      id={action.id}
+                      onSelect={onSelect}
+                      className="wql-row-button wql-validity-transition"
+                    >
+                      <span
+                        className={`wql-kind ${action.decision === "failed" ? "is-error" : ""}`}
+                      >
+                        {submit ? "Submit" : action.action}
+                      </span>
+                      <span className="wql-main">
+                        <strong>
+                          {sourceField.accessibleName ||
+                            "Field name not captured"}{" "}
+                          · {nativeValidityLabel(sourceField)} →{" "}
+                          {nativeValidityLabel(destinationField)}
+                        </strong>
+                        <small>
+                          {routeOf(stateById.get(action.fromStateId))} →{" "}
+                          {stateLabel(stateById.get(destinationField.stateId))}{" "}
+                          · {action.decision.replaceAll("_", " ")}
+                          {submit && action.decision === "failed"
+                            ? " · failed submission observed"
+                            : ""}
+                          {task && task.attempts > 1
+                            ? ` · ${task.attempts} task attempts recorded`
+                            : ""}
+                        </small>
+                      </span>
+                      <span className="wql-chip">
+                        {sourceField.validationEvidence?.willValidate &&
+                        destinationField.validationEvidence?.willValidate
+                          ? "Native validity"
+                          : "Applicability differs"}
+                      </span>
+                    </Selectable>
+                  );
+                })
+            ) : (
+              <p className="wql-empty-inline">
+                No matched source and destination validity snapshots were
+                recorded across an action. This does not mean validation is
+                absent.
+              </p>
+            )}
           </div>
         </>
       );
@@ -776,8 +900,14 @@ export function WorkflowQualityLens({
               label="State/relationship signals"
               value={stateRecorded.length}
             />
-            <Metric label="Repeated names on one screen" value={repeatedNames.length} />
-            <Metric label="Potentially ambiguous names" value={ambiguousNames.length} />
+            <Metric
+              label="Repeated names on one screen"
+              value={repeatedNames.length}
+            />
+            <Metric
+              label="Potentially ambiguous names"
+              value={ambiguousNames.length}
+            />
           </div>
           <div className="wql-note">
             These counts describe captured semantics. “Name not captured” or
@@ -826,11 +956,19 @@ export function WorkflowQualityLens({
                       <span className="wql-main">
                         <strong>{group.name}</strong>
                         <small>
-                          {stateLabel(stateById.get(group.stateId))} · {routeOf(stateById.get(group.stateId))} · {group.elements.length} controls
+                          {stateLabel(stateById.get(group.stateId))} ·{" "}
+                          {routeOf(stateById.get(group.stateId))} ·{" "}
+                          {group.elements.length} controls
                         </small>
                       </span>
                       <span className="wql-chip">
-                        {[...new Set(group.elements.map((element) => element.role || element.tag))].join(" / ")}
+                        {[
+                          ...new Set(
+                            group.elements.map(
+                              (element) => element.role || element.tag,
+                            ),
+                          ),
+                        ].join(" / ")}
                       </span>
                     </Selectable>
                   );
@@ -916,8 +1054,8 @@ export function WorkflowQualityLens({
         );
         return Boolean(
           source &&
-            action.toStateId &&
-            matchingControlForTransition(source, action.toStateId, elements),
+          action.toStateId &&
+          matchingControlForTransition(source, action.toStateId, elements),
         );
       });
       const rows = stateSignals.filter((element) =>
@@ -953,10 +1091,10 @@ export function WorkflowQualityLens({
             />
           </div>
           <div className="wql-note">
-            State changes are compared only when the same control can be
-            matched between the action's captured source and destination
-            snapshots. Action type alone is not used to infer an open, close,
-            selected, or expanded state.
+            State changes are compared only when the same control can be matched
+            between the action's captured source and destination snapshots.
+            Action type alone is not used to infer an open, close, selected, or
+            expanded state.
           </div>
           {rows.length ? (
             <div className="wql-card">
@@ -1089,7 +1227,9 @@ export function WorkflowQualityLens({
                         </small>
                         <small className="wql-transition-delta">
                           Dialog/menu cues:{" "}
-                          {regionCueChanges(sourceState, destination).join(" · ")}
+                          {regionCueChanges(sourceState, destination).join(
+                            " · ",
+                          )}
                         </small>
                       </span>
                     </Selectable>
@@ -1338,13 +1478,22 @@ export function WorkflowQualityLens({
         actionCount: actions.filter(
           (action) => action.fromStateId === state.id,
         ),
-        browserActionCount: actions.filter((action) => action.fromStateId === state.id && action.browserEvidence).length,
+        browserActionCount: actions.filter(
+          (action) => action.fromStateId === state.id && action.browserEvidence,
+        ).length,
         hasScreenshot: Boolean(state.screenshotPath),
-        componentCount: data.components.filter((component) => component.stateId === state.id).length,
+        componentCount: data.components.filter(
+          (component) => component.stateId === state.id,
+        ).length,
       }));
       const confidenceEvidence = stateEvidence.map((item) => ({
         ...item,
-        completeness: stateEvidenceScore(item.state, item.elementCount, item.componentCount, item.browserActionCount),
+        completeness: stateEvidenceScore(
+          item.state,
+          item.elementCount,
+          item.componentCount,
+          item.browserActionCount,
+        ),
       }));
       const screenshotStates = stateEvidence.filter(
         (item) => item.hasScreenshot,
@@ -1399,16 +1548,48 @@ export function WorkflowQualityLens({
               not add extra points. This score is a completeness checklist, not
               a calibrated confidence estimate.
             </div>
-            {confidenceEvidence.filter(({ state }) => textMatch([state.routeKey, stateLabel(state), pathOf(state.url)], normalizedQuery)).map(({ state, completeness, elementCount, componentCount, browserActionCount }) => (
-              <Selectable key={`confidence:${state.id}`} kind="state" id={state.id} onSelect={onSelect} className="wql-row-button wql-confidence-row">
-                <span className="wql-kind">{completeness.score}% evidence</span>
-                <span className="wql-main">
-                  <strong>{stateLabel(state)}</strong>
-                  <small>{routeOf(state)} · screenshot {completeness.evidence[0] ? "recorded" : "not recorded"} · {elementCount} controls · {componentCount} components · {state.recipe.steps.length} replay step(s) · {browserActionCount} browser evidence action(s)</small>
-                </span>
-                <span className="wql-chip">{completeness.evidence.filter(Boolean).length}/5 evidence types</span>
-              </Selectable>
-            ))}
+            {confidenceEvidence
+              .filter(({ state }) =>
+                textMatch(
+                  [state.routeKey, stateLabel(state), pathOf(state.url)],
+                  normalizedQuery,
+                ),
+              )
+              .map(
+                ({
+                  state,
+                  completeness,
+                  elementCount,
+                  componentCount,
+                  browserActionCount,
+                }) => (
+                  <Selectable
+                    key={`confidence:${state.id}`}
+                    kind="state"
+                    id={state.id}
+                    onSelect={onSelect}
+                    className="wql-row-button wql-confidence-row"
+                  >
+                    <span className="wql-kind">
+                      {completeness.score}% evidence
+                    </span>
+                    <span className="wql-main">
+                      <strong>{stateLabel(state)}</strong>
+                      <small>
+                        {routeOf(state)} · screenshot{" "}
+                        {completeness.evidence[0] ? "recorded" : "not recorded"}{" "}
+                        · {elementCount} controls · {componentCount} components
+                        · {state.recipe.steps.length} replay step(s) ·{" "}
+                        {browserActionCount} browser evidence action(s)
+                      </small>
+                    </span>
+                    <span className="wql-chip">
+                      {completeness.evidence.filter(Boolean).length}/5 evidence
+                      types
+                    </span>
+                  </Selectable>
+                ),
+              )}
           </div>
           {rows.length ? (
             <div className="wql-card">
@@ -1475,13 +1656,31 @@ export function WorkflowQualityLens({
         const before = evidence?.before;
         const after = evidence?.after;
         const traits = [
-          before?.passwordControlCount || after?.passwordControlCount || before?.signInControlCount || after?.signInControlCount ? "auth surface" : undefined,
-          before?.formCount || after?.formCount ? "form interaction" : undefined,
-          before?.searchControlCount || after?.searchControlCount ? "search interaction" : undefined,
-          before?.filterControlCount || after?.filterControlCount ? "filter interaction" : undefined,
-          evidence?.events.some((event) => event.kind === "redirect" || event.kind === "navigation_start") ? "navigation transition" : undefined,
+          before?.passwordControlCount ||
+          after?.passwordControlCount ||
+          before?.signInControlCount ||
+          after?.signInControlCount
+            ? "auth surface"
+            : undefined,
+          before?.formCount || after?.formCount
+            ? "form interaction"
+            : undefined,
+          before?.searchControlCount || after?.searchControlCount
+            ? "search interaction"
+            : undefined,
+          before?.filterControlCount || after?.filterControlCount
+            ? "filter interaction"
+            : undefined,
+          evidence?.events.some(
+            (event) =>
+              event.kind === "redirect" || event.kind === "navigation_start",
+          )
+            ? "navigation transition"
+            : undefined,
         ].filter(Boolean);
-        const activity = traits.length ? traits.join(" + ") : action?.action || "activity not classified";
+        const activity = traits.length
+          ? traits.join(" + ")
+          : action?.action || "activity not classified";
         const key = `${task.kind} · ${pathOf(task.url)} · ${activity}`;
         taskGroups.set(key, [...(taskGroups.get(key) || []), task]);
       }
@@ -1526,18 +1725,23 @@ export function WorkflowQualityLens({
                 const isExpanded = expandedScenarioIds.has(state.id);
                 const completeStepCount = steps.filter((step) => {
                   const matchingElements = data.elements.filter(
-                    (element) => element.structuralSignature === step.elementSignature,
+                    (element) =>
+                      element.structuralSignature === step.elementSignature,
                   );
                   const matchingAction = actions.some(
                     (action) =>
                       action.action === step.action &&
-                      matchingElements.some((element) => element.id === action.elementId),
+                      matchingElements.some(
+                        (element) => element.id === action.elementId,
+                      ),
                   );
                   return Boolean(
                     step.locators.length &&
-                      step.locators.some((locator) => locator.uniqueAtDiscovery) &&
-                      step.expectedFingerprint &&
-                      matchingAction,
+                    step.locators.some(
+                      (locator) => locator.uniqueAtDiscovery,
+                    ) &&
+                    step.expectedFingerprint &&
+                    matchingAction,
                   );
                 }).length;
                 return (
@@ -1546,13 +1750,18 @@ export function WorkflowQualityLens({
                       <button
                         type="button"
                         className="wql-row-button wql-scenario-select"
-                        onClick={() => onSelect({ kind: "state", id: state.id })}
+                        onClick={() =>
+                          onSelect({ kind: "state", id: state.id })
+                        }
                       >
                         <span className="wql-kind">{routeOf(state)}</span>
                         <span className="wql-main">
                           <strong>{stateLabel(state)}</strong>
                           <small>
-                            {steps.length} observed recipe step(s) · {completeStepCount}/{steps.length} with core evidence · {verified}/{locatorCount} locators restore-verified
+                            {steps.length} observed recipe step(s) ·{" "}
+                            {completeStepCount}/{steps.length} with core
+                            evidence · {verified}/{locatorCount} locators
+                            restore-verified
                           </small>
                         </span>
                         <span className="wql-chip">Candidate scenario</span>
@@ -1570,19 +1779,25 @@ export function WorkflowQualityLens({
                           })
                         }
                       >
-                        {isExpanded ? "Hide step evidence" : "Show step evidence"}
+                        {isExpanded
+                          ? "Hide step evidence"
+                          : "Show step evidence"}
                       </button>
                     </div>
                     {isExpanded && (
                       <div className="wql-scenario-steps">
                         {steps.map((step, index) => {
                           const matchingElements = data.elements.filter(
-                            (element) => element.structuralSignature === step.elementSignature,
+                            (element) =>
+                              element.structuralSignature ===
+                              step.elementSignature,
                           );
                           const observedAction = actions.find(
                             (action) =>
                               action.action === step.action &&
-                              matchingElements.some((element) => element.id === action.elementId),
+                              matchingElements.some(
+                                (element) => element.id === action.elementId,
+                              ),
                           );
                           const uniqueLocatorCount = step.locators.filter(
                             (locator) => locator.uniqueAtDiscovery,
@@ -1594,27 +1809,75 @@ export function WorkflowQualityLens({
                             step.expectedFingerprint || step.expectedUrl,
                           );
                           const checks = [
-                            ["Locator evidence", step.locators.length > 0, `${step.locators.length} captured`],
-                            ["Unique locator", uniqueLocatorCount > 0, `${uniqueLocatorCount} unique at discovery`],
-                            ["Restore verification", restoredLocatorCount > 0, `${restoredLocatorCount} verified after restore`],
-                            ["Matching observed action", Boolean(observedAction), observedAction ? "Observed" : "Not linked"],
-                            ["Expected result evidence", expectedStateCaptured, expectedStateCaptured ? "Fingerprint or route recorded" : "Not recorded"],
+                            [
+                              "Locator evidence",
+                              step.locators.length > 0,
+                              `${step.locators.length} captured`,
+                            ],
+                            [
+                              "Unique locator",
+                              uniqueLocatorCount > 0,
+                              `${uniqueLocatorCount} unique at discovery`,
+                            ],
+                            [
+                              "Restore verification",
+                              restoredLocatorCount > 0,
+                              `${restoredLocatorCount} verified after restore`,
+                            ],
+                            [
+                              "Matching observed action",
+                              Boolean(observedAction),
+                              observedAction ? "Observed" : "Not linked",
+                            ],
+                            [
+                              "Expected result evidence",
+                              expectedStateCaptured,
+                              expectedStateCaptured
+                                ? "Fingerprint or route recorded"
+                                : "Not recorded",
+                            ],
                           ] as const;
                           return (
-                            <div className="wql-scenario-step" key={`${state.id}:${index}`}>
-                              <span className="wql-scenario-step-number">{index + 1}</span>
+                            <div
+                              className="wql-scenario-step"
+                              key={`${state.id}:${index}`}
+                            >
+                              <span className="wql-scenario-step-number">
+                                {index + 1}
+                              </span>
                               <div className="wql-main">
-                                <strong>{step.action} · {matchingElements[0]?.accessibleName || matchingElements[0]?.role || "Control name not captured"}</strong>
-                                <small>{step.expectedUrl ? pathOf(step.expectedUrl) : "Expected route not recorded"}</small>
+                                <strong>
+                                  {step.action} ·{" "}
+                                  {matchingElements[0]?.accessibleName ||
+                                    matchingElements[0]?.role ||
+                                    "Control name not captured"}
+                                </strong>
+                                <small>
+                                  {step.expectedUrl
+                                    ? pathOf(step.expectedUrl)
+                                    : "Expected route not recorded"}
+                                </small>
                                 <ul className="wql-evidence-checks">
                                   {checks.map(([label, present, detail]) => (
-                                    <li className={present ? "is-present" : "is-missing"} key={label}>
-                                      <span aria-hidden="true">{present ? "✓" : "·"}</span> {label}: {detail}
+                                    <li
+                                      className={
+                                        present ? "is-present" : "is-missing"
+                                      }
+                                      key={label}
+                                    >
+                                      <span aria-hidden="true">
+                                        {present ? "✓" : "·"}
+                                      </span>{" "}
+                                      {label}: {detail}
                                     </li>
                                   ))}
                                 </ul>
                               </div>
-                              <span className="wql-chip">Evidence {checks.filter(([, present]) => present).length}/5</span>
+                              <span className="wql-chip">
+                                Evidence{" "}
+                                {checks.filter(([, present]) => present).length}
+                                /5
+                              </span>
                             </div>
                           );
                         })}
@@ -1637,7 +1900,10 @@ export function WorkflowQualityLens({
                 <Row key={group}>
                   <span className="wql-main">
                     <strong>{group}</strong>
-                    <small>Inferred from task kind, observed URL path, and value-free browser structure when available</small>
+                    <small>
+                      Inferred from task kind, observed URL path, and value-free
+                      browser structure when available
+                    </small>
                   </span>
                   <span>
                     {tasks.length} tasks ·{" "}
@@ -1810,32 +2076,79 @@ export function WorkflowQualityLens({
       );
       const recoveryFor = (failed: ActionEdge) => {
         const sourceState = stateById.get(failed.fromStateId);
-        const sourceControl = data.elements.find((element) => element.id === failed.elementId);
-        if (!sourceState || !sourceControl) return [] as { action: ActionEdge; kind: string; basis: string }[];
+        const sourceControl = data.elements.find(
+          (element) => element.id === failed.elementId,
+        );
+        if (!sourceState || !sourceControl)
+          return [] as { action: ActionEdge; kind: string; basis: string }[];
         const signature = fieldIdentity(sourceControl);
-        const hasUsefulSignature = Boolean(sourceControl.accessibleName.trim() || sourceControl.role.trim());
-        if (!hasUsefulSignature) return [] as { action: ActionEdge; kind: string; basis: string }[];
-        const later = actions.filter((candidate) => {
-          if (new Date(candidate.createdAt).getTime() <= new Date(failed.createdAt).getTime()) return false;
-          const candidateState = stateById.get(candidate.fromStateId);
-          if (!candidateState) return false;
-          return sourceState.fingerprint
-            ? candidateState.fingerprint === sourceState.fingerprint
-            : candidateState.routeKey === sourceState.routeKey;
-        }).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-        const linked: { action: ActionEdge; kind: string; basis: string }[] = [];
+        const hasUsefulSignature = Boolean(
+          sourceControl.accessibleName.trim() || sourceControl.role.trim(),
+        );
+        if (!hasUsefulSignature)
+          return [] as { action: ActionEdge; kind: string; basis: string }[];
+        const later = actions
+          .filter((candidate) => {
+            if (
+              new Date(candidate.createdAt).getTime() <=
+              new Date(failed.createdAt).getTime()
+            )
+              return false;
+            const candidateState = stateById.get(candidate.fromStateId);
+            if (!candidateState) return false;
+            return sourceState.fingerprint
+              ? candidateState.fingerprint === sourceState.fingerprint
+              : candidateState.routeKey === sourceState.routeKey;
+          })
+          .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+        const linked: { action: ActionEdge; kind: string; basis: string }[] =
+          [];
         for (const candidate of later) {
-          const control = data.elements.find((element) => element.id === candidate.elementId);
+          const control = data.elements.find(
+            (element) => element.id === candidate.elementId,
+          );
           if (!control) continue;
-          const sameSnapshot = Boolean(sourceState.fingerprint) && stateById.get(candidate.fromStateId)?.fingerprint === sourceState.fingerprint;
-          const basis = sameSnapshot ? "same captured state fingerprint" : "same route only; weaker match";
-          if (candidate.action === failed.action && fieldIdentity(control) === signature) {
-            linked.push({ action: candidate, kind: candidate.decision === "executed" ? "Possible successful retry" : "Possible retry" , basis });
-          } else if (sourceControl.isSubmit && sourceControl.formId &&
-            ["fill", "select"].includes(candidate.action) && control.formId === sourceControl.formId) {
-            linked.push({ action: candidate, kind: "Possible form correction", basis: `${basis} · same captured form association` });
-          } else if (sourceControl.isSubmit && control.isSubmit && control.formId === sourceControl.formId && candidate.decision === "executed") {
-            linked.push({ action: candidate, kind: "Later submit action executed", basis });
+          const sameSnapshot =
+            Boolean(sourceState.fingerprint) &&
+            stateById.get(candidate.fromStateId)?.fingerprint ===
+              sourceState.fingerprint;
+          const basis = sameSnapshot
+            ? "same captured state fingerprint"
+            : "same route only; weaker match";
+          if (
+            candidate.action === failed.action &&
+            fieldIdentity(control) === signature
+          ) {
+            linked.push({
+              action: candidate,
+              kind:
+                candidate.decision === "executed"
+                  ? "Possible successful retry"
+                  : "Possible retry",
+              basis,
+            });
+          } else if (
+            sourceControl.isSubmit &&
+            sourceControl.formId &&
+            ["fill", "select"].includes(candidate.action) &&
+            control.formId === sourceControl.formId
+          ) {
+            linked.push({
+              action: candidate,
+              kind: "Possible form correction",
+              basis: `${basis} · same captured form association`,
+            });
+          } else if (
+            sourceControl.isSubmit &&
+            control.isSubmit &&
+            control.formId === sourceControl.formId &&
+            candidate.decision === "executed"
+          ) {
+            linked.push({
+              action: candidate,
+              kind: "Later submit action executed",
+              basis,
+            });
           }
           if (linked.length >= 4) break;
         }
@@ -1934,56 +2247,79 @@ export function WorkflowQualityLens({
                 const recoveryLinks = recoveryFor(action);
                 const historyBreadcrumbs = [
                   ...historySignalsFor(action),
-                  ...recoveryLinks.flatMap(({ action: linked }) => historySignalsFor(linked)),
+                  ...recoveryLinks.flatMap(({ action: linked }) =>
+                    historySignalsFor(linked),
+                  ),
                 ];
                 return (
                   <React.Fragment key={action.id}>
-                  <Selectable
-                    kind="action"
-                    id={action.id}
-                    onSelect={onSelect}
-                    className="wql-row-button"
-                  >
-                    <span className="wql-kind is-error">Failed</span>
-                    <span className="wql-main">
-                      <strong>{action.targetName || action.action}</strong>
-                      <small>
-                        {action.error ||
-                          action.errorCode ||
-                          "Error detail not recorded"}{" "}
-                        · {routeOf(state)}
-                      </small>
-                    </span>
-                    <span className="wql-chip">
-                      {action.evidencePaths.length} evidence · restore{" "}
-                      {verified}/{locatorCount} ·{" "}
-                      {attempts === undefined
-                        ? "retry count not linked"
-                        : `${attempts} task attempt(s)`}
-                    </span>
-                    {submitControl && (
-                      <small className="wql-validation-flags">
-                        {formFields.length
-                          ? `${formInvalidCaptured} invalid boolean field flag(s) in source snapshot · ${formValidationCaptured}/${formFields.length} field validity records captured`
-                          : "Form field validation snapshot not available"}
-                      </small>
-                    )}
-                    {historyBreadcrumbs.length > 0 && (
-                      <small className="wql-recovery-history">
-                        Observed page History API cue(s): {[...new Set(historyBreadcrumbs)].join(" · ")}. These signals do not identify browser toolbar use.
-                      </small>
-                    )}
-                  </Selectable>
-                  {recoveryLinks.map(({ action: linked, kind, basis }) => (
-                    <Selectable key={`${action.id}:${linked.id}`} kind="action" id={linked.id} onSelect={onSelect} className="wql-row-button wql-recovery-link">
-                      <span className={`wql-kind ${linked.decision === "failed" ? "is-error" : ""}`}>{kind}</span>
+                    <Selectable
+                      kind="action"
+                      id={action.id}
+                      onSelect={onSelect}
+                      className="wql-row-button"
+                    >
+                      <span className="wql-kind is-error">Failed</span>
                       <span className="wql-main">
-                        <strong>{linked.targetName || linked.action}</strong>
-                        <small>{routeOf(stateById.get(linked.fromStateId))} → {linked.toStateId ? stateLabel(stateById.get(linked.toStateId)) : "Destination unknown"} · {linked.decision.replaceAll("_", " ")} · inferred relation: {basis}</small>
+                        <strong>{action.targetName || action.action}</strong>
+                        <small>
+                          {action.error ||
+                            action.errorCode ||
+                            "Error detail not recorded"}{" "}
+                          · {routeOf(state)}
+                        </small>
                       </span>
-                      <span className="wql-chip">{linked.evidencePaths.length} evidence item(s)</span>
+                      <span className="wql-chip">
+                        {action.evidencePaths.length} evidence · restore{" "}
+                        {verified}/{locatorCount} ·{" "}
+                        {attempts === undefined
+                          ? "retry count not linked"
+                          : `${attempts} task attempt(s)`}
+                      </span>
+                      {submitControl && (
+                        <small className="wql-validation-flags">
+                          {formFields.length
+                            ? `${formInvalidCaptured} invalid boolean field flag(s) in source snapshot · ${formValidationCaptured}/${formFields.length} field validity records captured`
+                            : "Form field validation snapshot not available"}
+                        </small>
+                      )}
+                      {historyBreadcrumbs.length > 0 && (
+                        <small className="wql-recovery-history">
+                          Observed page History API cue(s):{" "}
+                          {[...new Set(historyBreadcrumbs)].join(" · ")}. These
+                          signals do not identify browser toolbar use.
+                        </small>
+                      )}
                     </Selectable>
-                  ))}
+                    {recoveryLinks.map(({ action: linked, kind, basis }) => (
+                      <Selectable
+                        key={`${action.id}:${linked.id}`}
+                        kind="action"
+                        id={linked.id}
+                        onSelect={onSelect}
+                        className="wql-row-button wql-recovery-link"
+                      >
+                        <span
+                          className={`wql-kind ${linked.decision === "failed" ? "is-error" : ""}`}
+                        >
+                          {kind}
+                        </span>
+                        <span className="wql-main">
+                          <strong>{linked.targetName || linked.action}</strong>
+                          <small>
+                            {routeOf(stateById.get(linked.fromStateId))} →{" "}
+                            {linked.toStateId
+                              ? stateLabel(stateById.get(linked.toStateId))
+                              : "Destination unknown"}{" "}
+                            · {linked.decision.replaceAll("_", " ")} · inferred
+                            relation: {basis}
+                          </small>
+                        </span>
+                        <span className="wql-chip">
+                          {linked.evidencePaths.length} evidence item(s)
+                        </span>
+                      </Selectable>
+                    ))}
                   </React.Fragment>
                 );
               })}
@@ -2206,9 +2542,13 @@ export function WorkflowQualityLens({
       ).size;
       const browserSearchActions = actions.filter((action) => {
         const evidence = action.browserEvidence;
-        return evidence && (
-          evidence.before.searchControlCount + evidence.after.searchControlCount +
-          evidence.before.filterControlCount + evidence.after.filterControlCount > 0
+        return (
+          evidence &&
+          evidence.before.searchControlCount +
+            evidence.after.searchControlCount +
+            evidence.before.filterControlCount +
+            evidence.after.filterControlCount >
+            0
         );
       });
       return (
@@ -2223,7 +2563,10 @@ export function WorkflowQualityLens({
               value={`${candidateActionCount}/${candidates.length}`}
             />
             <Metric label="Recorded candidate actions" value={rows.length} />
-            <Metric label="Actions with browser search/filter evidence" value={browserSearchActions.length} />
+            <Metric
+              label="Actions with browser search/filter evidence"
+              value={browserSearchActions.length}
+            />
           </div>
           <div className="wql-note">
             Candidates are identified from captured control names and types
@@ -2232,8 +2575,8 @@ export function WorkflowQualityLens({
             linked API status/counts. They do not show entered terms, field
             values, request bodies, or response bodies. Browser evidence also
             records control and result-candidate counts around each action,
-            without storing search text. A missing cue is
-            unknown, not proof that results exist or that no request occurred.
+            without storing search text. A missing cue is unknown, not proof
+            that results exist or that no request occurred.
           </div>
           {candidates.length ? (
             <div className="wql-card">
@@ -2405,7 +2748,9 @@ export function WorkflowQualityLens({
                                     " shared structure tokens"
                                   : ""}
                               </small>
-                              <small className="wql-search-evidence">{browserSummary}</small>
+                              <small className="wql-search-evidence">
+                                {browserSummary}
+                              </small>
                               <small className="wql-search-evidence">
                                 Observed navigation: {routeStateSummary}
                               </small>
@@ -2445,13 +2790,41 @@ export function WorkflowQualityLens({
           {browserSearchActions.length > 0 && (
             <div className="wql-card">
               <h3>Browser-observed search and filter changes</h3>
-              <p className="wql-note">Result candidates count visible list rows, list items, articles, and table rows in the main region. Empty cues use conventional accessibility/test selectors. These are structural counts, not proof of the meaning of a result set.</p>
+              <p className="wql-note">
+                Result candidates count visible list rows, list items, articles,
+                and table rows in the main region. Empty cues use conventional
+                accessibility/test selectors. These are structural counts, not
+                proof of the meaning of a result set.
+              </p>
               {browserSearchActions.slice(0, 100).map((action) => {
                 const evidence = action.browserEvidence!;
-                return <Selectable key={action.id} kind="action" id={action.id} onSelect={onSelect} className="wql-row-button">
-                  <span className="wql-kind">{action.decision.replaceAll("_", " ")}</span>
-                  <span className="wql-main"><strong>{action.action} · {action.targetName || "search/filter control"}</strong><small>Result candidates {evidence.before.resultItemCount} → {evidence.after.resultItemCount} · empty cues {evidence.before.emptyCueCount} → {evidence.after.emptyCueCount} · status regions {evidence.before.statusCount} → {evidence.after.statusCount}</small></span>
-                </Selectable>;
+                return (
+                  <Selectable
+                    key={action.id}
+                    kind="action"
+                    id={action.id}
+                    onSelect={onSelect}
+                    className="wql-row-button"
+                  >
+                    <span className="wql-kind">
+                      {action.decision.replaceAll("_", " ")}
+                    </span>
+                    <span className="wql-main">
+                      <strong>
+                        {action.action} ·{" "}
+                        {action.targetName || "search/filter control"}
+                      </strong>
+                      <small>
+                        Result candidates {evidence.before.resultItemCount} →{" "}
+                        {evidence.after.resultItemCount} · empty cues{" "}
+                        {evidence.before.emptyCueCount} →{" "}
+                        {evidence.after.emptyCueCount} · status regions{" "}
+                        {evidence.before.statusCount} →{" "}
+                        {evidence.after.statusCount}
+                      </small>
+                    </span>
+                  </Selectable>
+                );
               })}
             </div>
           )}
@@ -2461,33 +2834,58 @@ export function WorkflowQualityLens({
 
     // Similarity is an inference. Captured component family/kind signals add
     // evidence where available; they do not establish shared implementation.
-    const tokensByRoute = new Map<string, { structure: Set<string>; components: Set<string> }>();
+    const tokensByRoute = new Map<
+      string,
+      { structure: Set<string>; components: Set<string> }
+    >();
     for (const state of states) {
       const features = tokensByRoute.get(routeOf(state)) || {
         structure: new Set<string>(),
         components: new Set<string>(),
       };
       state.structureTokens.forEach((token) => features.structure.add(token));
-      for (const component of data.components.filter((item) => item.stateId === state.id)) {
+      for (const component of data.components.filter(
+        (item) => item.stateId === state.id,
+      )) {
         features.components.add(`kind:${component.kind}`);
-        if (component.familyId) features.components.add(`family:${component.familyId}`);
+        if (component.familyId)
+          features.components.add(`family:${component.familyId}`);
       }
       tokensByRoute.set(routeOf(state), features);
     }
     const routes = [...tokensByRoute.entries()];
-    const pairs: { a: string; b: string; score: number; overlap: number; componentOverlap: number; structureOverlap: number }[] =
-      [];
+    const pairs: {
+      a: string;
+      b: string;
+      score: number;
+      overlap: number;
+      componentOverlap: number;
+      structureOverlap: number;
+    }[] = [];
     for (let i = 0; i < routes.length; i++)
       for (let j = i + 1; j < routes.length; j++) {
         const [a, left] = routes[i];
         const [b, right] = routes[j];
         const allLeft = new Set([...left.structure, ...left.components]);
         const allRight = new Set([...right.structure, ...right.components]);
-        const overlap = [...allLeft].filter((token) => allRight.has(token)).length;
-        const componentOverlap = [...left.components].filter((token) => right.components.has(token)).length;
-        const structureOverlap = [...left.structure].filter((token) => right.structure.has(token)).length;
+        const overlap = [...allLeft].filter((token) =>
+          allRight.has(token),
+        ).length;
+        const componentOverlap = [...left.components].filter((token) =>
+          right.components.has(token),
+        ).length;
+        const structureOverlap = [...left.structure].filter((token) =>
+          right.structure.has(token),
+        ).length;
         const union = new Set([...allLeft, ...allRight]).size;
-        pairs.push({ a, b, overlap, componentOverlap, structureOverlap, score: union ? overlap / union : 0 });
+        pairs.push({
+          a,
+          b,
+          overlap,
+          componentOverlap,
+          structureOverlap,
+          score: union ? overlap / union : 0,
+        });
       }
     const matches = pairs
       .filter((pair) => textMatch([pair.a, pair.b], normalizedQuery))
@@ -2504,16 +2902,20 @@ export function WorkflowQualityLens({
           />
           <Metric
             label="Routes with component signals"
-            value={[...tokensByRoute.values()].filter((features) => features.components.size > 0).length}
+            value={
+              [...tokensByRoute.values()].filter(
+                (features) => features.components.size > 0,
+              ).length
+            }
             help="Captured component kinds or family IDs"
           />
         </div>
         <div className="wql-note">
           Similarity is inferred from overlap in captured structure tokens and,
-          where available, component kinds and family IDs. It indicates
-          observed structural overlap only, not equivalent behavior or shared
-          implementation. Routes without component signals use structure
-          tokens only.
+          where available, component kinds and family IDs. It indicates observed
+          structural overlap only, not equivalent behavior or shared
+          implementation. Routes without component signals use structure tokens
+          only.
         </div>
         {matches.length ? (
           <div className="wql-card">
@@ -2524,7 +2926,10 @@ export function WorkflowQualityLens({
                   <strong>
                     {pair.a} ↔ {pair.b}
                   </strong>
-                    <small>{pair.structureOverlap} shared structure token(s) · {pair.componentOverlap} shared component signal(s)</small>
+                  <small>
+                    {pair.structureOverlap} shared structure token(s) ·{" "}
+                    {pair.componentOverlap} shared component signal(s)
+                  </small>
                 </span>
                 <span className="wql-similarity">
                   <b>{Math.round(pair.score * 100)}%</b>

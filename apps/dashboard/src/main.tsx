@@ -1,6 +1,7 @@
 import React, {
   useState,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useCallback,
   useRef,
@@ -55,6 +56,8 @@ import {
   ArrowLeft,
   ExternalLink,
   Copy,
+  Trash2,
+  KeyRound,
   FileJson,
   FileCode2,
   FileText,
@@ -72,6 +75,7 @@ import {
   Command,
   ArrowRight,
   LayoutGrid,
+  Home,
   List,
   Compass,
   Fingerprint,
@@ -84,14 +88,17 @@ import {
   Bot,
   Archive,
   LogOut,
-  Settings2,
   Send,
   MonitorPlay,
-  Settings,
+  Radio,
+  ScrollText,
   Info,
   TriangleAlert,
   Image as ImageIcon,
   FileSearch,
+  Server,
+  Puzzle,
+  Workflow,
 } from "lucide-react";
 import type {
   RunSummary,
@@ -105,10 +112,17 @@ import type {
   ProjectData,
   ApiCall,
   UserSettings,
+  AuthCapture,
+  RunEvent,
 } from "../../../packages/shared/src/index";
 import "reactflow/dist/style.css";
 import "./styles.css";
 import { downloadFlowSvg } from "./flow-image-export";
+import { AuthBackdrop } from "./auth-backdrop";
+import { AuthCaptureWizard, AuthCaptureList } from "./flow-auth-capture-views";
+import { SetupStepsEditor } from "./flow-setup-steps";
+import { AppMcp } from "./flow-appmcp-views";
+import { useFullscreenToggle } from "./use-fullscreen";
 const ComponentReuseMap = React.lazy(() =>
   import("./flow-structure-views").then((module) => ({
     default: module.ComponentReuseMap,
@@ -232,6 +246,21 @@ const FlowExecutionAnalysisView = React.lazy(() =>
 const FlowRecordingView = React.lazy(() =>
   import("./flow-replay-coverage-views").then((module) => ({
     default: module.FlowRecordingView,
+  })),
+);
+const Capabilities = React.lazy(() =>
+  import("./flow-capabilities-views").then((module) => ({
+    default: module.Capabilities,
+  })),
+);
+const AiBrowse = React.lazy(() =>
+  import("./flow-ai-browse-views").then((module) => ({
+    default: module.AiBrowse,
+  })),
+);
+const AutomationPage = React.lazy(() =>
+  import("./flow-automation-views").then((module) => ({
+    default: module.AutomationPage,
   })),
 );
 type Icon = typeof Layers;
@@ -495,6 +524,7 @@ function AuthGate() {
   if (loading)
     return (
       <div className="auth-loading">
+        <AuthBackdrop />
         <span className="brand-mark">
           <Layers size={22} />
         </span>
@@ -541,6 +571,7 @@ function AuthGate() {
 function AuthPage({ children }: { children: React.ReactNode }) {
   return (
     <main className="auth-screen">
+      <AuthBackdrop />
       <section className="auth-card">{children}</section>
     </main>
   );
@@ -713,6 +744,22 @@ const actionDestination = (action: ActionEdge, states: AppState[]) => {
 };
 const flowLabelPart = (value: string, max = 24) =>
   value.length > max ? `${value.slice(0, max - 1)}…` : value;
+const timeAgo = (iso: string) => {
+  const seconds = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
+  const units: [string, number][] = [
+    ["year", 31536000],
+    ["month", 2592000],
+    ["week", 604800],
+    ["day", 86400],
+    ["hour", 3600],
+    ["minute", 60],
+  ];
+  for (const [label, secondsInUnit] of units) {
+    const count = Math.floor(seconds / secondsInUnit);
+    if (count >= 1) return `${count} ${label}${count === 1 ? "" : "s"} ago`;
+  }
+  return "just now";
+};
 function Status({ value }: { value: string }) {
   return (
     <span className={`status status-${value}`}>
@@ -764,17 +811,49 @@ function McpSetup({
   projects,
   initialProjectId,
   close,
+  openExtensionSettings,
 }: {
   projects: ProjectSummary[];
   initialProjectId?: string;
   close: () => void;
+  openExtensionSettings: () => void;
 }) {
+  const [method, setMethod] = useState<"appmcp" | "webmcp" | "mcp">("appmcp");
+  const [downloadError, setDownloadError] = useState("");
+  const [downloading, setDownloading] = useState(false);
+  const downloadExtension = async () => {
+    setDownloadError("");
+    setDownloading(true);
+    try {
+      const res = await fetch("/api/extension/download");
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}) as { error?: string });
+        throw new Error(body.error || "Could not download the extension.");
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "unfold-extension.zip";
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (cause) {
+      setDownloadError(
+        cause instanceof Error
+          ? cause.message
+          : "Could not download the extension.",
+      );
+    } finally {
+      setDownloading(false);
+    }
+  };
   const [projectId, setProjectId] = useState(
     initialProjectId ||
       projects.find((project) => !project.archivedAt)?.id ||
       "",
   );
   const [client, setClient] = useState<"codex" | "claude" | "copilot">("codex");
+  const serverUrl = window.location.origin;
   const project = projects.find((item) => item.id === projectId);
   const endpoint = project
     ? `${window.location.origin}/api/projects/${project.id}/mcp`
@@ -845,13 +924,28 @@ function McpSetup({
       >
         <header className="mcp-setup-header">
           <div className="mcp-setup-mark">
-            <Cable size={18} />
+            {method === "appmcp" ? (
+              <Server size={18} />
+            ) : method === "webmcp" ? (
+              <Puzzle size={18} />
+            ) : (
+              <Cable size={18} />
+            )}
           </div>
           <div>
-            <h2 id="mcp-setup-title">Connect an agent</h2>
+            <h2 id="mcp-setup-title">
+              {method === "appmcp"
+                ? "Connect an agent directly"
+                : method === "webmcp"
+                  ? "Connect the browser extension"
+                  : "Connect an agent"}
+            </h2>
             <p>
-              Set up Codex, Claude Code, Copilot, VS Code, or another client for
-              this project’s MCP.
+              {method === "appmcp"
+                ? "Call this project's published capabilities directly as MCP tools — no browser or extension required."
+                : method === "webmcp"
+                  ? "Give the Unfold Chrome extension a server URL and access token so it can register WebMCP tools on sites you allow."
+                  : "Set up Codex, Claude Code, Copilot, VS Code, or another client for this project’s fixed discovery-analysis toolset."}
             </p>
           </div>
           <button
@@ -862,7 +956,103 @@ function McpSetup({
             <X size={17} />
           </button>
         </header>
-        {projects.filter((item) => !item.archivedAt).length ? (
+        <div
+          className="mcp-setup-clients mcp-setup-methods"
+          role="tablist"
+          aria-label="Connection method"
+        >
+          <button
+            role="tab"
+            aria-selected={method === "appmcp"}
+            className={method === "appmcp" ? "active" : ""}
+            onClick={() => setMethod("appmcp")}
+          >
+            <Server size={13} /> AppMCP
+          </button>
+          <button
+            role="tab"
+            aria-selected={method === "webmcp"}
+            className={method === "webmcp" ? "active" : ""}
+            onClick={() => setMethod("webmcp")}
+          >
+            <Puzzle size={13} /> WebMCP
+          </button>
+          <button
+            role="tab"
+            aria-selected={method === "mcp"}
+            className={method === "mcp" ? "active" : ""}
+            onClick={() => setMethod("mcp")}
+          >
+            <Cable size={13} /> Regular MCP
+          </button>
+        </div>
+        {method === "webmcp" ? (
+          <div className="mcp-setup-extension">
+            <ol className="mcp-setup-steps">
+              <li>
+                <span>Create a personal access token</span>
+                <p>
+                  Tokens are the credential the extension authenticates with.
+                </p>
+                <button
+                  type="button"
+                  className="button"
+                  onClick={openExtensionSettings}
+                >
+                  Open Settings → Extensions
+                </button>
+              </li>
+              <li>
+                <span>Download the extension</span>
+                <p>
+                  Unzip it, then in Chrome open chrome://extensions, turn on
+                  Developer mode, and “Load unpacked” the unzipped folder. Open
+                  the extension’s options page from there.
+                </p>
+                <button
+                  type="button"
+                  className="button"
+                  onClick={downloadExtension}
+                  disabled={downloading}
+                >
+                  <Download size={14} />
+                  {downloading ? "Downloading…" : "Download extension"}
+                </button>
+                {downloadError && (
+                  <p className="mcp-setup-error" role="alert">
+                    {downloadError}
+                  </p>
+                )}
+              </li>
+              <li>
+                <span>Connect it to this server</span>
+                <div className="mcp-setup-endpoint">
+                  <span>Server URL</span>
+                  <code>{serverUrl}</code>
+                  <CopyButton value={serverUrl} />
+                </div>
+                <p>
+                  Paste this URL and your token into the extension’s “Connect to
+                  your Unfold server” form, then click Connect.
+                </p>
+              </li>
+              <li>
+                <span>Allow sites</span>
+                <p>
+                  In the extension options, grant the origins where you want
+                  Unfold’s WebMCP tools to register.
+                </p>
+              </li>
+            </ol>
+            <div className="mcp-setup-auth">
+              <ShieldCheck size={16} />
+              <p>
+                The extension authenticates as you. Revoke its token from
+                Settings → Extensions any time to disconnect it.
+              </p>
+            </div>
+          </div>
+        ) : projects.filter((item) => !item.archivedAt).length ? (
           <>
             <label className="mcp-setup-project">
               <span>Project</span>
@@ -879,54 +1069,60 @@ function McpSetup({
                   ))}
               </select>
             </label>
-            <div className="mcp-setup-endpoint">
-              <span>Project endpoint</span>
-              <code>{endpoint}</code>
-              <CopyButton value={endpoint} />
-            </div>
-            <div className="mcp-setup-capabilities">
-              <span>
-                <Check size={14} /> Read discoveries, components, routes, and
-                captured flows
-              </span>
-              <span>
-                <Check size={14} /> Start a discovery from your agent
-              </span>
-            </div>
-            <div
-              className="mcp-setup-clients"
-              role="tablist"
-              aria-label="Agent client"
-            >
-              {(["codex", "claude", "copilot"] as const).map((id) => (
-                <button
-                  key={id}
-                  role="tab"
-                  aria-selected={client === id}
-                  className={client === id ? "active" : ""}
-                  onClick={() => setClient(id)}
+            {method === "appmcp" ? (
+              <AppMcp projectId={projectId} />
+            ) : (
+              <>
+                <div className="mcp-setup-endpoint">
+                  <span>Project endpoint</span>
+                  <code>{endpoint}</code>
+                  <CopyButton value={endpoint} />
+                </div>
+                <div className="mcp-setup-capabilities">
+                  <span>
+                    <Check size={14} /> Read discoveries, components, routes,
+                    and captured flows
+                  </span>
+                  <span>
+                    <Check size={14} /> Start a discovery from your agent
+                  </span>
+                </div>
+                <div
+                  className="mcp-setup-clients"
+                  role="tablist"
+                  aria-label="Agent client"
                 >
-                  {id === "codex"
-                    ? "Codex"
-                    : id === "claude"
-                      ? "Claude Code"
-                      : "Copilot"}
-                </button>
-              ))}
-            </div>
-            <p className="mcp-setup-instructions">{instructions[client]}</p>
-            <pre className="mcp-setup-code">
-              <code>{snippets[client]}</code>
-              <CopyButton value={snippets[client]} />
-            </pre>
-            <div className="mcp-setup-auth">
-              <ShieldCheck size={16} />
-              <p>
-                This endpoint requires a valid Unfold access token with the
-                configured API audience. Replace the placeholder before
-                connecting. Ask your workspace admin if you need a token.
-              </p>
-            </div>
+                  {(["codex", "claude", "copilot"] as const).map((id) => (
+                    <button
+                      key={id}
+                      role="tab"
+                      aria-selected={client === id}
+                      className={client === id ? "active" : ""}
+                      onClick={() => setClient(id)}
+                    >
+                      {id === "codex"
+                        ? "Codex"
+                        : id === "claude"
+                          ? "Claude Code"
+                          : "Copilot"}
+                    </button>
+                  ))}
+                </div>
+                <p className="mcp-setup-instructions">{instructions[client]}</p>
+                <pre className="mcp-setup-code">
+                  <code>{snippets[client]}</code>
+                  <CopyButton value={snippets[client]} />
+                </pre>
+                <div className="mcp-setup-auth">
+                  <ShieldCheck size={16} />
+                  <p>
+                    This endpoint requires a valid Unfold access token with the
+                    configured API audience. Replace the placeholder before
+                    connecting. Ask your workspace admin if you need a token.
+                  </p>
+                </div>
+              </>
+            )}
           </>
         ) : (
           <div className="mcp-setup-empty">
@@ -951,9 +1147,11 @@ type DiscoveryHeaderActions = {
   controlLabel: string;
   error?: string;
   stopReason?: string;
+  streamWorkers: boolean;
   onControl: () => void;
   onExport: () => void;
   onInfo: () => void;
+  onWatchLive: () => void;
 };
 
 function App({ user }: { user: AuthProfile }) {
@@ -963,7 +1161,7 @@ function App({ user }: { user: AuthProfile }) {
     [error, setError] = useState(""),
     [newProject, setNewProject] = useState(false),
     [mcpSetup, setMcpSetup] = useState(false),
-    [projectTool, setProjectTool] = useState<"mcp" | "agent" | null>(null),
+    [projectTool, setProjectTool] = useState<"agent" | "browse" | null>(null),
     [flowAssistantOpen, setFlowAssistantOpen] = useState(false),
     [discoveryNoticeOpen, setDiscoveryNoticeOpen] = useState(false),
     [discoveryHeaderActions, setDiscoveryHeaderActions] =
@@ -976,7 +1174,7 @@ function App({ user }: { user: AuthProfile }) {
     setProjectTool(null);
     setFlowAssistantOpen(false);
   }, []);
-  const openProjectTool = useCallback((tool: "mcp" | "agent") => {
+  const openProjectTool = useCallback((tool: "agent" | "browse") => {
     setFlowAssistantOpen(false);
     setProjectTool(tool);
   }, []);
@@ -1077,12 +1275,13 @@ function App({ user }: { user: AuthProfile }) {
     }
   }, [location.pathname]);
   const sectionLabels: Record<string, string> = {
-    graph: "Flows",
-    states: "States & routes",
+    graph: "Explorer",
+    states: "Screens",
     components: "Components",
     actions: "Interactions",
     api: "APIs",
     artifacts: "Artifacts",
+    capabilities: "WebMCP Tools",
   };
   breadcrumbItems.push({ label: "Projects", to: "/projects" });
   if (location.pathname === "/projects" || location.pathname === "/") {
@@ -1130,32 +1329,6 @@ function App({ user }: { user: AuthProfile }) {
             </span>
             unfold
           </Link>
-          <nav className="topbar-primary-nav" aria-label="Main navigation">
-            <Link
-              className={location.pathname === "/projects" ? "active" : ""}
-              to="/projects"
-              viewTransition
-            >
-              <LayoutGrid size={15} />
-              <span>Dashboard</span>
-            </Link>
-            <Link
-              className={location.pathname === "/activity" ? "active" : ""}
-              to="/activity"
-              viewTransition
-            >
-              <Activity size={15} />
-              <span>Activity</span>
-            </Link>
-            <button
-              type="button"
-              className={location.pathname === "/settings" ? "active" : ""}
-              onClick={() => navigate("/settings")}
-            >
-              <Settings2 size={15} />
-              <span>Settings</span>
-            </button>
-          </nav>
           <div className="topbar-actions">
             <button
               className="topbar-new-project"
@@ -1167,7 +1340,7 @@ function App({ user }: { user: AuthProfile }) {
             </button>
             <label className="topbar-project-picker">
               <span className="topbar-project-monogram">
-                {selectedProject?.name.trim()[0]?.toUpperCase() || (
+                {selectedProject?.name?.trim()?.[0]?.toUpperCase() || (
                   <FolderKanban size={13} />
                 )}
               </span>
@@ -1188,6 +1361,37 @@ function App({ user }: { user: AuthProfile }) {
               </select>
               <ChevronDown size={14} />
             </label>
+            <nav
+              className="topbar-primary-nav topbar-primary-nav-icons"
+              aria-label="Main navigation"
+            >
+              <Link
+                className={
+                  location.pathname === "/projects"
+                    ? "topbar-new-project active"
+                    : "topbar-new-project"
+                }
+                to="/projects"
+                viewTransition
+                aria-label="Dashboard"
+                title="Dashboard"
+              >
+                <Home size={20} strokeWidth={2.5} />
+              </Link>
+              <Link
+                className={
+                  location.pathname === "/activity"
+                    ? "topbar-new-project active"
+                    : "topbar-new-project"
+                }
+                to="/activity"
+                viewTransition
+                aria-label="Activity"
+                title="Activity"
+              >
+                <Activity size={20} strokeWidth={2.5} />
+              </Link>
+            </nav>
             <button
               className="topbar-setup"
               onClick={() => setMcpSetup(true)}
@@ -1340,16 +1544,43 @@ function App({ user }: { user: AuthProfile }) {
                 <Bot size={16} />
               </button>
               <button
-                className={projectTool === "mcp" ? "active" : ""}
+                className={projectTool === "browse" ? "active" : ""}
                 type="button"
-                onClick={() => openProjectTool("mcp")}
-                aria-label="Open MCP connection"
+                onClick={() => openProjectTool("browse")}
+                aria-label="Open AI Browse"
                 aria-haspopup="dialog"
-                aria-expanded={projectTool === "mcp"}
-                title="MCP connection"
+                aria-expanded={projectTool === "browse"}
+                title="AI Browse"
               >
-                <Wrench size={16} />
+                <MonitorPlay size={16} />
               </button>
+              <button
+                className={pathParts[2] === "automation" ? "active" : ""}
+                type="button"
+                onClick={() =>
+                  navigate(`/projects/${currentProject.id}/automation`)
+                }
+                aria-label="Open Automation"
+                title="Automation"
+              >
+                <Workflow size={16} />
+              </button>
+              {pathParts[2] === "discoveries" &&
+                pathParts[3] &&
+                activeDiscoveryHeaderActions &&
+                activeDiscoveryHeaderActions.running &&
+                activeDiscoveryHeaderActions.streamWorkers && (
+                  <button
+                    className="discovery-header-icon watch-live"
+                    type="button"
+                    onClick={activeDiscoveryHeaderActions.onWatchLive}
+                    aria-label="Watch discovery live"
+                    title="Discovery is running — watch live"
+                  >
+                    <Radio size={16} />
+                    <span className="watch-live-dot" aria-hidden="true" />
+                  </button>
+                )}
               {pathParts[2] === "discoveries" &&
                 pathParts[3] &&
                 activeDiscoveryHeaderActions && (
@@ -1443,6 +1674,30 @@ function App({ user }: { user: AuthProfile }) {
               }
             />
             <Route
+              path="/projects/:projectId/automation/*"
+              element={
+                <>
+                  <React.Suspense fallback={null}>
+                    <AutomationPage
+                      key={location.pathname.split("/")[2]}
+                      projectId={location.pathname.split("/")[2]}
+                    />
+                  </React.Suspense>
+                  <ProjectWorkspace
+                    key={`project-tools-${location.pathname.split("/")[2]}`}
+                    refresh={refresh}
+                    notify={setToast}
+                    globalSettings={userSettings}
+                    activeTool={projectTool}
+                    closeTool={closeProjectTool}
+                    assistantDrawerOpen={flowAssistantOpen}
+                    closeAssistantDrawer={closeFlowAssistant}
+                    modalHostOnly
+                  />
+                </>
+              }
+            />
+            <Route
               path="/projects/:projectId"
               element={
                 <ProjectWorkspace
@@ -1493,6 +1748,10 @@ function App({ user }: { user: AuthProfile }) {
           projects={projects}
           initialProjectId={selectedProject?.id}
           close={() => setMcpSetup(false)}
+          openExtensionSettings={() => {
+            setMcpSetup(false);
+            navigate("/settings?tab=extensions");
+          }}
         />
       )}
       {toast && (
@@ -1514,12 +1773,18 @@ function SettingsPage({
   back: () => void;
   save: (settings: UserSettings) => Promise<void>;
 }) {
+  const location = useLocation();
   const [draft, setDraft] = useState(initialSettings);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState<
-    "appearance" | "policy" | "defaults"
-  >("appearance");
+    "appearance" | "policy" | "defaults" | "extensions"
+  >(() => {
+    const tab = new URLSearchParams(location.search).get("tab");
+    return tab === "policy" || tab === "defaults" || tab === "extensions"
+      ? tab
+      : "appearance";
+  });
   const setDiscovery = <K extends keyof UserSettings["discovery"]>(
     key: K,
     value: UserSettings["discovery"][K],
@@ -1570,6 +1835,7 @@ function SettingsPage({
                 ["appearance", "Appearance"],
                 ["policy", "Discovery policy"],
                 ["defaults", "Discovery defaults"],
+                ["extensions", "Extensions"],
               ] as const
             ).map(([id, label]) => (
               <button
@@ -1757,7 +2023,7 @@ function SettingsPage({
                         ["maxDepth", "Maximum depth", 0, 20],
                         ["maxStates", "Maximum states", 1, 10000],
                         ["maxActions", "Maximum actions", 1, 20000],
-                        ["maxDurationMinutes", "Time limit (minutes)", 1, 240],
+                        ["maxDurationMinutes", "Time limit (minutes)", 1, 360],
                         [
                           "actionTimeoutMs",
                           "Action timeout (ms)",
@@ -1843,24 +2109,202 @@ function SettingsPage({
                   </label>
                 </section>
               )}
+              {activeTab === "extensions" && <ApiTokensPanel />}
             </div>
             {error && (
               <div className="settings-error" role="alert">
                 {error}
               </div>
             )}
-            <footer className="global-settings-footer">
-              <button type="button" className="button" onClick={back}>
-                Cancel
-              </button>
-              <button type="submit" className="button primary" disabled={busy}>
-                {busy ? "Saving…" : "Save settings"}
-              </button>
-            </footer>
+            {activeTab !== "extensions" && (
+              <footer className="global-settings-footer">
+                <button type="button" className="button" onClick={back}>
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="button primary"
+                  disabled={busy}
+                >
+                  {busy ? "Saving…" : "Save settings"}
+                </button>
+              </footer>
+            )}
           </form>
         </div>
       </section>
     </main>
+  );
+}
+
+type ApiToken = {
+  id: string;
+  label: string;
+  createdAt: string;
+  lastUsedAt?: string;
+};
+
+/**
+ * Personal access tokens — the credential the Chrome extension (apps/extension)
+ * authenticates with, since it can't safely hold a short-lived Auth0 access
+ * token or a sensitive refresh token client-side (apps/server/src/auth.ts).
+ * Self-contained: its own fetch calls rather than participating in
+ * `SettingsPage`'s `draft`/`save` lifecycle, since a token isn't a setting
+ * that gets saved — issuing/revoking are each their own immediate action.
+ */
+function ApiTokensPanel() {
+  const [tokens, setTokens] = useState<ApiToken[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [label, setLabel] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [justCreated, setJustCreated] = useState<{
+    label: string;
+    token: string;
+  } | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [error, setError] = useState("");
+
+  const load = useCallback(() => {
+    api<ApiToken[]>("/settings/tokens", undefined, "GET")
+      .then((list) => {
+        setTokens(list);
+        setLoaded(true);
+      })
+      .catch((cause) =>
+        setError(
+          cause instanceof Error ? cause.message : "Could not load tokens",
+        ),
+      );
+  }, []);
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const create = async () => {
+    if (!label.trim()) return;
+    setCreating(true);
+    setError("");
+    try {
+      const created = await api<ApiToken & { token: string }>(
+        "/settings/tokens",
+        {
+          label: label.trim(),
+        },
+      );
+      setJustCreated({ label: created.label, token: created.token });
+      setCopied(false);
+      setLabel("");
+      load();
+    } catch (cause) {
+      setError(
+        cause instanceof Error ? cause.message : "Could not create token",
+      );
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const revoke = async (id: string) => {
+    try {
+      await api(`/settings/tokens/${id}`, {}, "DELETE");
+      setTokens((current) => current.filter((t) => t.id !== id));
+    } catch (cause) {
+      setError(
+        cause instanceof Error ? cause.message : "Could not revoke token",
+      );
+    }
+  };
+
+  const copyToken = () => {
+    if (!justCreated) return;
+    navigator.clipboard?.writeText(justCreated.token).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  };
+
+  return (
+    <section className="settings-tokens">
+      <p className="settings-tokens-intro">
+        Personal access tokens let the Unfold Chrome extension (or other tools)
+        authenticate as you without a browser session. Each token can see and
+        act on everything your account can — treat it like a password, and
+        revoke any token you no longer use.
+      </p>
+      {justCreated && (
+        <div className="settings-token-reveal">
+          <strong>{justCreated.label}</strong>
+          <p>Copy this token now — it won't be shown again.</p>
+          <div className="settings-token-reveal-value">
+            <code>{justCreated.token}</code>
+            <button type="button" className="icon-button" onClick={copyToken}>
+              {copied ? <Check size={14} /> : <Copy size={14} />}
+            </button>
+          </div>
+        </div>
+      )}
+      <div className="settings-token-create">
+        <input
+          value={label}
+          onChange={(event) => setLabel(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              create();
+            }
+          }}
+          placeholder="Token label, e.g. Chrome extension"
+          maxLength={80}
+          disabled={creating}
+        />
+        <button
+          type="button"
+          className="button primary"
+          disabled={creating || !label.trim()}
+          onClick={create}
+        >
+          <Plus size={14} />
+          {creating ? "Creating…" : "Create token"}
+        </button>
+      </div>
+      {error && (
+        <div className="settings-error" role="alert">
+          {error}
+        </div>
+      )}
+      {loaded && !tokens.length && (
+        <p className="muted">No personal access tokens yet.</p>
+      )}
+      {tokens.length > 0 && (
+        <ul className="settings-token-list">
+          {tokens.map((token) => (
+            <li key={token.id}>
+              <span className="settings-token-icon">
+                <KeyRound size={14} />
+              </span>
+              <div className="settings-token-meta">
+                <strong>{token.label}</strong>
+                <small>
+                  Created {new Date(token.createdAt).toLocaleDateString()}
+                  {token.lastUsedAt
+                    ? ` · last used ${new Date(token.lastUsedAt).toLocaleDateString()}`
+                    : " · never used"}
+                </small>
+              </div>
+              <button
+                type="button"
+                className="icon-button"
+                aria-label={`Revoke ${token.label}`}
+                title="Revoke"
+                onClick={() => revoke(token.id)}
+              >
+                <Trash2 size={14} />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 
@@ -1899,23 +2343,6 @@ function Projects({
   );
   return (
     <main className="runs-page dashboard-page">
-      <div className="page-heading">
-        <div>
-          <div className="eyebrow">
-            <LayoutGrid size={15} />
-            Dashboard
-          </div>
-          <h1>Your projects.</h1>
-          <p>
-            Discoveries, project context, and a dedicated MCP connection in one
-            place.
-          </p>
-        </div>
-        <button className="button primary" onClick={create}>
-          <Plus size={16} />
-          New project
-        </button>
-      </div>
       <div className="runs-summary">
         <div>
           <strong>{projects.length}</strong>
@@ -1943,11 +2370,21 @@ function Projects({
         </div>
       </div>
       <div className="section-bar">
-        <h2>
-          {showArchived ? "Archived projects" : "Your projects"}{" "}
-          <span>{visible.length}</span>
-        </h2>
+        <div className="section-heading">
+          <h2>
+            {showArchived ? "Archived projects" : "Your projects"}{" "}
+            <span>{visible.length}</span>
+          </h2>
+          <p>
+            Discoveries, project context, and a dedicated MCP connection in one
+            place.
+          </p>
+        </div>
         <div className="section-actions">
+          <button className="button primary" onClick={create}>
+            <Plus size={16} />
+            New project
+          </button>
           <button
             className="button"
             onClick={() => setShowArchived(!showArchived)}
@@ -2199,7 +2636,7 @@ function ProjectWorkspace({
   refresh: () => void;
   notify: (s: string) => void;
   globalSettings?: UserSettings;
-  activeTool: "mcp" | "agent" | null;
+  activeTool: "agent" | "browse" | null;
   closeTool: () => void;
   assistantDrawerOpen: boolean;
   closeAssistantDrawer: () => void;
@@ -2214,6 +2651,11 @@ function ProjectWorkspace({
     "gallery" | "list"
   >("gallery");
   const [discoveriesFullscreen, setDiscoveriesFullscreen] = useState(false);
+  const assistantPanelRef = useRef<HTMLElement>(null);
+  const {
+    isFullscreen: assistantIsFullscreen,
+    toggleFullscreen: toggleAssistantFullscreen,
+  } = useFullscreenToggle(assistantPanelRef);
   const [assistantSessions, setAssistantSessions] = useState(() =>
     readAssistantSessionState(projectId),
   );
@@ -2493,24 +2935,9 @@ function ProjectWorkspace({
       notify((e as Error).message);
     }
   };
-  const serverName = `unfold-${
-    p.name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-|-$/g, "") || "project"
-  }`;
-  const config = JSON.stringify(
-    {
-      mcpServers: {
-        [serverName]: { url: window.location.origin + data.mcp.endpoint },
-      },
-    },
-    null,
-    2,
-  );
   const renderDiscoveryCards = () => (
     <div className={`run-cards discovery-cards ${discoveryViewMode}`}>
-      {data.discoveries.map((r) => (
+      {data.discoveries.map((r, i) => (
         <Link
           className="run-card"
           to={`/projects/${p.id}/discoveries/${r.id}/graph`}
@@ -2521,6 +2948,7 @@ function ProjectWorkspace({
               states={r.stats.states}
               active={r.status === "running"}
             />
+            <span className="card-index">#{i + 1}</span>
             <span className="preview-label">{r.config.baseUrl}</span>
             <Status value={r.status} />
           </div>
@@ -2528,7 +2956,7 @@ function ProjectWorkspace({
             <span className="app-favicon">{r.name[0]}</span>
             <div>
               <h3>{r.name}</h3>
-              <p>Web discovery · {new Date(r.createdAt).toLocaleString()}</p>
+              <p>Web discovery · {timeAgo(r.createdAt)}</p>
             </div>
             <ArrowUpRight size={19} />
           </div>
@@ -2609,98 +3037,6 @@ function ProjectWorkspace({
       )}
     </div>
   );
-  const mcpScreen = (
-    <div
-      className="project-tool-fullscreen"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Project MCP connection"
-    >
-      <div className="project-tool-modal-content">
-        <header className="project-tool-modal-header">
-          <div className="project-tool-modal-title">
-            <span className="agent-screen-mark">
-              <Cable size={18} />
-            </span>
-            <div>
-              <h2>MCP connection</h2>
-              <p>Connect a client to {p.name}.</p>
-            </div>
-          </div>
-          <button
-            type="button"
-            className="button project-tool-modal-close"
-            onClick={closeTool}
-            aria-label="Close MCP connection"
-            title="Close MCP connection"
-          >
-            <X size={16} />
-            <span>Close</span>
-          </button>
-        </header>
-        <section className="project-panel mcp-modal-panel">
-          <div className="panel-heading">
-            <div>
-              <div className="eyebrow">
-                <Cable size={14} />
-                Project connection
-              </div>
-              <h2>Connect an MCP client</h2>
-              <p>
-                This endpoint exposes read-only tools for this project’s
-                discoveries.
-              </p>
-            </div>
-          </div>
-          <label className="field-label">Streamable HTTP endpoint</label>
-          <div className="endpoint-box">
-            <code>{window.location.origin + data.mcp.endpoint}</code>
-            <CopyButton value={window.location.origin + data.mcp.endpoint} />
-          </div>
-          <label className="field-label">Client configuration</label>
-          <pre className="code-panel">
-            {config}
-            <CopyButton value={config} />
-          </pre>
-          <div className="mcp-columns">
-            <div>
-              <h3>Tools</h3>
-              {data.mcp.tools.map((t) => (
-                <div className="mcp-item" key={t}>
-                  <code>{t}</code>
-                  <span>
-                    {t === "start_discovery"
-                      ? "Project-scoped, starts a discovery"
-                      : "Project-scoped, read-only"}
-                  </span>
-                </div>
-              ))}
-            </div>
-            <div>
-              <h3>Context</h3>
-              {data.mcp.resources.map((t) => (
-                <div className="mcp-item" key={t}>
-                  <code>{t}</code>
-                  <span>Resource</span>
-                </div>
-              ))}
-              {data.mcp.prompts.map((t) => (
-                <div className="mcp-item" key={t}>
-                  <code>{t}</code>
-                  <span>Prompt</span>
-                </div>
-              ))}
-            </div>
-          </div>
-          <p className="muted-note">
-            The MCP endpoint is available on this local Unfold server. Clients
-            may use a different configuration format; use the endpoint URL when
-            prompted.
-          </p>
-        </section>
-      </div>
-    </div>
-  );
   const assistantScreen = (
     <div
       className={assistantDrawerOpen ? "agent-drawer-backdrop" : undefined}
@@ -2709,6 +3045,7 @@ function ProjectWorkspace({
       }}
     >
       <section
+        ref={assistantPanelRef}
         className={`project-panel agent-panel agent-only-panel ${assistantDrawerOpen ? "agent-drawer" : "agent-fullscreen"} ${browserStreaming ? "agent-browser-visible" : "agent-chat-only"}`}
         role="dialog"
         aria-modal="true"
@@ -2763,6 +3100,21 @@ function ProjectWorkspace({
               New session
             </button>
           </div>
+          <button
+            type="button"
+            className="icon-button"
+            aria-label={
+              assistantIsFullscreen ? "Exit full screen" : "Enter full screen"
+            }
+            title={assistantIsFullscreen ? "Exit full screen" : "Full screen"}
+            onClick={toggleAssistantFullscreen}
+          >
+            {assistantIsFullscreen ? (
+              <Minimize2 size={16} />
+            ) : (
+              <Maximize2 size={16} />
+            )}
+          </button>
           <button
             type="button"
             className="button project-tool-modal-close"
@@ -2953,9 +3305,15 @@ function ProjectWorkspace({
   if (modalHostOnly)
     return (
       <>
-        {activeTool === "mcp" && createPortal(mcpScreen, document.body)}
         {(activeTool === "agent" || assistantDrawerOpen) &&
           createPortal(assistantScreen, document.body)}
+        {activeTool === "browse" &&
+          createPortal(
+            <React.Suspense fallback={null}>
+              <AiBrowse projectId={p.id} onClose={closeTool} />
+            </React.Suspense>,
+            document.body,
+          )}
       </>
     );
   return (
@@ -3035,25 +3393,33 @@ function ProjectWorkspace({
           </div>,
           document.body,
         )}
-      {activeTool === "mcp" && createPortal(mcpScreen, document.body)}
       {(activeTool === "agent" || assistantDrawerOpen) &&
         createPortal(assistantScreen, document.body)}
-      {newDiscovery && (
-        <NewScan
-          projectId={p.id}
-          projectName={p.name}
-          projectUrl={p.baseUrl}
-          projectConfig={p.scanConfig}
-          globalDefaults={globalSettings?.discovery}
-          close={() => setNewDiscovery(false)}
-          created={async (r) => {
-            setNewDiscovery(false);
-            await refresh();
-            load();
-            navigate(`/projects/${p.id}/discoveries/${r.id}/graph`);
-          }}
-        />
-      )}
+      {activeTool === "browse" &&
+        createPortal(
+          <React.Suspense fallback={null}>
+            <AiBrowse projectId={p.id} onClose={closeTool} />
+          </React.Suspense>,
+          document.body,
+        )}
+      {newDiscovery &&
+        createPortal(
+          <NewScan
+            projectId={p.id}
+            projectName={p.name}
+            projectUrl={p.baseUrl}
+            projectConfig={p.scanConfig}
+            globalDefaults={globalSettings?.discovery}
+            close={() => setNewDiscovery(false)}
+            created={async (r) => {
+              setNewDiscovery(false);
+              await refresh();
+              load();
+              navigate(`/projects/${p.id}/discoveries/${r.id}/graph`);
+            }}
+          />,
+          document.body,
+        )}
     </main>
   );
 }
@@ -3246,6 +3612,229 @@ function SearchBox({
     </div>
   );
 }
+const PAGES_SECTIONS = [
+  { name: "Screens", path: "states", icon: Layers },
+  { name: "Components", path: "components", icon: Box },
+  { name: "Interactions", path: "actions", icon: MousePointer2 },
+  { name: "APIs", path: "api", icon: Activity },
+];
+const PAGES_PATHS = PAGES_SECTIONS.map((tab) => tab.path);
+type DiscoverySection = {
+  name: string;
+  path: string;
+  icon: typeof Network;
+  group?: string[];
+};
+// Discover -> verify -> publish is one shared pipeline (apps/server/src/capabilities.ts)
+// that both the AppMCP and WebMCP connections (set up from the top-right
+// Connect button) read from — no separate sub-tabs needed here anymore.
+const DISCOVERY_SECTIONS: DiscoverySection[] = [
+  { name: "Explorer", path: "graph", icon: Network },
+  { name: "Pages", path: PAGES_PATHS[0], icon: LayoutGrid, group: PAGES_PATHS },
+  { name: "MCP", path: "capabilities", icon: Wrench },
+  { name: "Artifacts", path: "artifacts", icon: FolderDown },
+];
+function EventLog({ events }: { events: RunEvent[] }) {
+  if (!events.length)
+    return <p className="muted-note">No activity recorded yet.</p>;
+  return (
+    <div className="event-log">
+      {[...events].reverse().map((e) => (
+        <div className={`activity-row ${e.level}`} key={e.id}>
+          <span className="activity-dot" />
+          <time>{new Date(e.time).toLocaleTimeString()}</time>
+          <span>{e.message}</span>
+          {e.worker && <small>Worker {e.worker}</small>}
+        </div>
+      ))}
+    </div>
+  );
+}
+function LiveViewModal({
+  runApi,
+  data,
+  running,
+  onClose,
+}: {
+  runApi: string;
+  data: RunData;
+  running: boolean;
+  onClose: () => void;
+}) {
+  const total = data.run.config.concurrency;
+  const columnOptions = [1, 2, 3, total].filter(
+    (n, i, arr) => n <= total && arr.indexOf(n) === i,
+  );
+  const [columns, setColumns] = useState(() => Math.min(total, 3) || 1);
+  const [tab, setTab] = useState<"screens" | "logs">("screens");
+  return (
+    <div className="live-view-backdrop">
+      <section
+        className="live-view-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="live-view-title"
+      >
+        <div className="live-view-toolbar">
+          <div className="live-view-title">
+            <span className="modal-icon">
+              <Radio size={20} />
+            </span>
+            <div>
+              <h2 id="live-view-title">Watch live</h2>
+              <p>
+                {tab === "screens"
+                  ? "Each worker's current page, refreshed a few times a second."
+                  : "Everything the engine has logged for this discovery, newest first."}
+                {tab === "screens" &&
+                  !running &&
+                  " Discovery isn't running right now — showing the last frame captured from each worker."}
+              </p>
+            </div>
+          </div>
+          <nav className="live-view-tabs" aria-label="Live view tabs">
+            <button
+              type="button"
+              className={tab === "screens" ? "active" : ""}
+              onClick={() => setTab("screens")}
+            >
+              <MonitorPlay size={14} />
+              Screens
+            </button>
+            <button
+              type="button"
+              className={tab === "logs" ? "active" : ""}
+              onClick={() => setTab("logs")}
+            >
+              <ScrollText size={14} />
+              Logs
+            </button>
+          </nav>
+          <button
+            className="icon-button"
+            onClick={onClose}
+            aria-label="Close live view"
+          >
+            <X size={20} />
+          </button>
+        </div>
+        {tab === "screens" ? (
+          <>
+            {columnOptions.length > 1 && (
+              <div
+                className="live-view-controls"
+                role="radiogroup"
+                aria-label="Screens per row"
+              >
+                {columnOptions.map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    className={columns === n ? "active" : ""}
+                    aria-pressed={columns === n}
+                    onClick={() => setColumns(n)}
+                  >
+                    {n === total && total > 3 ? "All" : n}
+                  </button>
+                ))}
+              </div>
+            )}
+            <div
+              className="live-workers-grid"
+              style={{
+                gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
+              }}
+            >
+              {Array.from({ length: total }, (_, i) => (
+                <WorkerScreen
+                  key={i + 1}
+                  runApi={runApi}
+                  worker={i + 1}
+                  active={running}
+                />
+              ))}
+            </div>
+          </>
+        ) : (
+          <div className="live-view-logs">
+            <EventLog events={data.events} />
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+function WorkerScreen({
+  runApi,
+  worker,
+  active,
+}: {
+  runApi: string;
+  worker: number;
+  active: boolean;
+}) {
+  const [src, setSrc] = useState<string>();
+  const [idle, setIdle] = useState(false);
+  const urlRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    let stopped = false;
+    const poll = async () => {
+      try {
+        const res = await fetch(`/api${runApi}/workers/${worker}/screenshot`, {
+          credentials: "same-origin",
+        });
+        if (stopped) return;
+        if (res.status === 204) {
+          setIdle(true);
+          return;
+        }
+        if (!res.ok) return;
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        setIdle(false);
+        setSrc(url);
+        if (urlRef.current) URL.revokeObjectURL(urlRef.current);
+        urlRef.current = url;
+      } catch {
+        // Transient network error; keep showing the last frame.
+      }
+    };
+    // Always fetch once on mount — including when !active, so a worker
+    // remounted after the run already paused/finished (e.g. the user
+    // switched tabs away and back) shows the last captured frame or "Idle"
+    // instead of sitting on the initial "Starting…" placeholder forever,
+    // which is what happened before: the whole effect short-circuited on
+    // `!active` and never polled at all.
+    void poll();
+    if (!active)
+      return () => {
+        stopped = true;
+      };
+    const id = setInterval(poll, 1200);
+    return () => {
+      stopped = true;
+      clearInterval(id);
+    };
+  }, [runApi, worker, active]);
+  useEffect(
+    () => () => {
+      if (urlRef.current) URL.revokeObjectURL(urlRef.current);
+    },
+    [],
+  );
+  return (
+    <div className="live-worker-screen">
+      <div className="live-worker-label">Worker {worker}</div>
+      {src ? (
+        <img src={src} alt={`Worker ${worker} current page`} />
+      ) : (
+        <div className="live-worker-placeholder">
+          {idle ? "Idle" : "Starting…"}
+        </div>
+      )}
+    </div>
+  );
+}
 function RunView({
   notify,
   refreshRuns,
@@ -3277,6 +3866,30 @@ function RunView({
     } | null>(null),
     [busy, setBusy] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
+  const [explorerView, setExplorerView] = useState<{
+    label: string;
+    description: string;
+  } | null>(null);
+  const tabRefs = useRef<Record<string, HTMLAnchorElement | null>>({});
+  const [tabIndicator, setTabIndicator] = useState({ left: 0, width: 0 });
+  const [showLiveView, setShowLiveView] = useState(false);
+  const sections = DISCOVERY_SECTIONS;
+  const activeTopTabPath = (
+    sections.find((tab) =>
+      tab.group ? tab.group.includes(section) : section === tab.path,
+    ) || sections[0]
+  ).path;
+  useLayoutEffect(() => {
+    const el = tabRefs.current[activeTopTabPath];
+    if (!el) return;
+    const measure = () =>
+      setTabIndicator({ left: el.offsetLeft, width: el.offsetWidth });
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    if (el.parentElement) observer.observe(el.parentElement);
+    return () => observer.disconnect();
+  }, [activeTopTabPath]);
   const running = data
     ? ["running", "pausing", "queued"].includes(data.run.status)
     : false;
@@ -3287,7 +3900,7 @@ function RunView({
       : running
         ? "Pause discovery"
         : data.run.status === "limited"
-          ? "Extend and resume discovery"
+          ? "Extend to Thorough and resume"
           : "Resume discovery";
   const refresh = useCallback(() => {
     if (id)
@@ -3310,11 +3923,21 @@ function RunView({
           data.run.status === "limited"
             ? {
                 budgets: {
-                  maxActions: Math.min(50000, data.run.config.maxActions * 2),
-                  maxStates: Math.min(10000, data.run.config.maxStates * 2),
-                  maxDurationMinutes: Math.min(
-                    240,
-                    data.run.config.maxDurationMinutes * 2,
+                  maxActions: Math.max(
+                    data.run.config.maxActions,
+                    EXPLORATION_LEVELS.thorough.values!.maxActions,
+                  ),
+                  maxStates: Math.max(
+                    data.run.config.maxStates,
+                    EXPLORATION_LEVELS.thorough.values!.maxStates,
+                  ),
+                  maxDurationMinutes: Math.max(
+                    data.run.config.maxDurationMinutes,
+                    EXPLORATION_LEVELS.thorough.values!.maxDurationMinutes,
+                  ),
+                  maxDepth: Math.max(
+                    data.run.config.maxDepth,
+                    EXPLORATION_LEVELS.thorough.values!.maxDepth,
                   ),
                 },
               }
@@ -3345,6 +3968,7 @@ function RunView({
     }
   }, [data, notify, runApi]);
   const onInfo = useCallback(() => setShowInfo(true), []);
+  const onWatchLive = useCallback(() => setShowLiveView(true), []);
   useEffect(() => {
     if (!data || !onHeaderActionsChange) return;
     onHeaderActionsChange({
@@ -3355,9 +3979,11 @@ function RunView({
       controlLabel,
       error: data.run.error || undefined,
       stopReason: data.run.stopReason || undefined,
+      streamWorkers: !!data.run.config.streamWorkers,
       onControl,
       onExport,
       onInfo,
+      onWatchLive,
     });
   }, [
     data,
@@ -3367,6 +3993,7 @@ function RunView({
     onControl,
     onExport,
     onInfo,
+    onWatchLive,
     onHeaderActionsChange,
   ]);
   useEffect(() => {
@@ -3415,14 +4042,9 @@ function RunView({
   const r = data.run,
     s = r.stats;
   const chooseState = (id: string) => setSelection({ kind: "state", id });
-  const discoverySections = [
-    { name: "Flows", path: "graph", icon: Network },
-    { name: "States & routes", path: "states", icon: Layers },
-    { name: "Components", path: "components", icon: Box },
-    { name: "Interactions", path: "actions", icon: MousePointer2 },
-    { name: "APIs", path: "api", icon: Activity },
-    { name: "Artifacts", path: "artifacts", icon: FolderDown },
-  ];
+  const activeGroupSections = PAGES_PATHS.includes(section)
+    ? PAGES_SECTIONS
+    : null;
   return (
     <main className="run-page">
       {showInfo && (
@@ -3442,52 +4064,54 @@ function RunView({
               <div>
                 <span className="eyebrow">Discovery overview</span>
                 <h2 id="discovery-info-title">{r.name}</h2>
+                <a
+                  className="discovery-info-url"
+                  href={r.config.baseUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {r.config.baseUrl}
+                  <ExternalLink size={12} />
+                </a>
               </div>
-              <button
-                className="icon-button"
-                type="button"
-                aria-label="Close discovery information"
-                onClick={() => setShowInfo(false)}
-              >
-                <X size={16} />
-              </button>
+              <div className="discovery-info-header-actions">
+                <Status value={r.status} />
+                <button
+                  className="icon-button"
+                  type="button"
+                  aria-label="Close discovery information"
+                  onClick={() => setShowInfo(false)}
+                >
+                  <X size={16} />
+                </button>
+              </div>
             </header>
-            <p className="discovery-info-summary">
-              Observed {s.routes} routes and {s.states} distinct UI states,
-              recorded {s.actions} interactions, and found {s.components}{" "}
-              reusable components.
-            </p>
-            <dl>
+            <div className="discovery-info-stats">
               <div>
-                <dt>URL</dt>
-                <dd>
-                  <a href={r.config.baseUrl} target="_blank" rel="noreferrer">
-                    {r.config.baseUrl}
-                    <ExternalLink size={12} />
-                  </a>
-                </dd>
+                <strong>{compact(s.routes)}</strong>
+                <span>Routes</span>
               </div>
               <div>
-                <dt>Type</dt>
-                <dd>Web application discovery</dd>
+                <strong>{compact(s.states)}</strong>
+                <span>States</span>
               </div>
               <div>
-                <dt>Observed pages</dt>
-                <dd>{s.states} distinct UI states</dd>
+                <strong>{compact(s.actions)}</strong>
+                <span>Actions</span>
               </div>
               <div>
-                <dt>Routes</dt>
-                <dd>{s.routes}</dd>
+                <strong>{compact(s.components)}</strong>
+                <span>Components</span>
               </div>
-              <div>
-                <dt>Status</dt>
-                <dd>
-                  <Status value={r.status} />
-                </dd>
-              </div>
+            </div>
+            <dl className="discovery-info-meta">
               <div>
                 <dt>Created</dt>
                 <dd>{new Date(r.createdAt).toLocaleString()}</dd>
+              </div>
+              <div>
+                <dt>Duration</dt>
+                <dd>{duration(r.elapsedMs)}</dd>
               </div>
               {r.config.roleLabel && (
                 <div>
@@ -3510,88 +4134,152 @@ function RunView({
           className="project-tabs discovery-tabs"
           aria-label="Discovery sections"
         >
-          {discoverySections.map((tab) => (
-            <Link
-              key={tab.path}
-              className={section === tab.path ? "active" : ""}
-              aria-current={section === tab.path ? "page" : undefined}
-              to={`/projects/${projectId}/discoveries/${id}/${tab.path}`}
-            >
-              <tab.icon size={15} />
-              {tab.name}
-            </Link>
-          ))}
+          <span
+            className="discovery-tabs-indicator"
+            aria-hidden="true"
+            style={{
+              transform: `translateX(${tabIndicator.left}px)`,
+              width: tabIndicator.width,
+              opacity: tabIndicator.width ? 1 : 0,
+            }}
+          />
+          {sections.map((tab) => {
+            const tabActive = tab.group
+              ? tab.group.includes(section)
+              : section === tab.path;
+            return (
+              <Link
+                key={tab.path}
+                ref={(el) => {
+                  tabRefs.current[tab.path] = el;
+                }}
+                className={tabActive ? "active" : ""}
+                aria-current={tabActive ? "page" : undefined}
+                to={`/projects/${projectId}/discoveries/${id}/${tab.path}`}
+              >
+                <tab.icon size={15} />
+                {tab.name}
+              </Link>
+            );
+          })}
         </nav>
       )}
-      <div className="view-heading">
-        <div className="view-title">
-          <h2>
-            {(
-              {
-                graph: "Flow explorer",
-                states: "States & routes",
-                components: "Component library",
-                actions: "Interaction log",
-                api: "APIs",
-                artifacts: "Discovery artifacts",
-              } as Record<string, string>
-            )[section] || "Flow explorer"}
-          </h2>
-          <span>
-            {section === "graph"
-              ? "Follow the paths. Inspect the evidence."
-              : section === "components"
-                ? "Reusable regions, grounded in real observations."
-                : section === "actions"
-                  ? "Every attempted interaction and its observed outcome."
-                  : section === "api"
-                    ? "Application API requests observed during routes and interactions."
-                    : section === "artifacts"
-                      ? "Take your findings from exploration to automation."
-                      : "A closer look at every reachable interface."}
-          </span>
-        </div>
-        <SearchBox value={query} onChange={setQuery} />
-      </div>
-      <div className="content-area">
-        {section === "graph" ? (
-          <FlowView
-            data={data}
-            query={query}
-            selection={selection}
-            onSelect={setSelection}
-            onOpenAssistant={onOpenAssistant}
-            assistantOpen={assistantOpen}
-          />
-        ) : section === "states" ? (
-          <States data={data} query={query} select={chooseState} />
-        ) : section === "components" ? (
-          <Components data={data} query={query} select={chooseState} />
-        ) : section === "actions" ? (
-          <Actions
-            data={data}
-            query={query}
-            select={(id) => setSelection({ kind: "action", id })}
-          />
-        ) : section === "api" ? (
-          <ApiFlow data={data} query={query} />
-        ) : section === "artifacts" ? (
-          <Artifacts
-            data={data}
-            query={query}
-            download={onExport}
-            filesPath={`${runApi}/files`}
-          />
-        ) : (
-          <Navigate
-            to={
-              projectId
-                ? `/projects/${projectId}/discoveries/${id}/graph`
-                : `/runs/${id}/graph`
-            }
-          />
-        )}
-      </div>
+      {(() => {
+        const heading = (
+          <div className="view-heading">
+            <div className="view-title">
+              <h2>
+                {section === "graph"
+                  ? explorerView?.label || " "
+                  : (
+                      {
+                        states: "Screens",
+                        components: "Component library",
+                        actions: "Interaction log",
+                        api: "APIs",
+                        artifacts: "Discovery artifacts",
+                        capabilities: "MCP",
+                      } as Record<string, string>
+                    )[section] || " "}
+              </h2>
+              <span>
+                {section === "graph"
+                  ? explorerView?.description || " "
+                  : section === "states"
+                    ? "Every screen observed during exploration, with its structure and evidence."
+                    : section === "components"
+                      ? "Reusable regions, grounded in real observations."
+                      : section === "actions"
+                        ? "Every attempted interaction and its observed outcome."
+                        : section === "api"
+                          ? "Application API requests observed during routes and interactions."
+                          : section === "artifacts"
+                            ? "Take your findings from exploration to automation."
+                            : section === "capabilities"
+                              ? "Mine, verify, and publish capabilities — used by both the AppMCP and WebMCP connections (set up from Connect, top right)."
+                              : " "}
+              </span>
+            </div>
+            <div className="view-heading-controls">
+              <SearchBox value={query} onChange={setQuery} />
+              {projectId && activeGroupSections && (
+                <nav
+                  className="view-section-tabs"
+                  aria-label="Section navigation"
+                >
+                  {activeGroupSections.map((tab) => (
+                    <Link
+                      key={tab.path}
+                      className={section === tab.path ? "active" : ""}
+                      aria-current={section === tab.path ? "page" : undefined}
+                      aria-label={tab.name}
+                      to={`/projects/${projectId}/discoveries/${id}/${tab.path}`}
+                    >
+                      <tab.icon size={15} />
+                      <span className="view-section-tab-label">{tab.name}</span>
+                    </Link>
+                  ))}
+                </nav>
+              )}
+            </div>
+          </div>
+        );
+        const content = (
+          <div className="content-area">
+            {section === "graph" ? (
+              <FlowView
+                data={data}
+                query={query}
+                selection={selection}
+                onSelect={setSelection}
+                onOpenAssistant={onOpenAssistant}
+                assistantOpen={assistantOpen}
+                onActiveViewChange={setExplorerView}
+              />
+            ) : section === "states" ? (
+              <States data={data} query={query} select={chooseState} />
+            ) : section === "components" ? (
+              <Components data={data} query={query} select={chooseState} />
+            ) : section === "actions" ? (
+              <Actions
+                data={data}
+                query={query}
+                select={(id) => setSelection({ kind: "action", id })}
+              />
+            ) : section === "api" ? (
+              <ApiFlow data={data} query={query} />
+            ) : section === "artifacts" ? (
+              <Artifacts
+                data={data}
+                query={query}
+                download={onExport}
+                filesPath={`${runApi}/files`}
+              />
+            ) : section === "capabilities" ? (
+              <Capabilities
+                data={data}
+                query={query}
+                projectId={projectId || ""}
+                discoveryId={id || ""}
+              />
+            ) : (
+              <Navigate
+                to={
+                  projectId
+                    ? `/projects/${projectId}/discoveries/${id}/graph`
+                    : `/runs/${id}/graph`
+                }
+              />
+            )}
+          </div>
+        );
+        return (
+          <>
+            {heading}
+            {content}
+          </>
+        );
+      })()}
       <footer className="run-footer">
         <span>
           <span className={running ? "online" : "muted-dot"} />
@@ -3627,6 +4315,17 @@ function RunView({
           select={setSelection}
         />
       )}
+      {showLiveView &&
+        data &&
+        createPortal(
+          <LiveViewModal
+            runApi={runApi}
+            data={data}
+            running={running}
+            onClose={() => setShowLiveView(false)}
+          />,
+          document.body,
+        )}
     </main>
   );
 }
@@ -4156,6 +4855,7 @@ function FlowView({
   onSelect,
   onOpenAssistant,
   assistantOpen = false,
+  onActiveViewChange,
 }: {
   data: RunData;
   query: string;
@@ -4163,6 +4863,9 @@ function FlowView({
   onSelect: (s: { kind: "state" | "action"; id: string }) => void;
   onOpenAssistant?: () => void;
   assistantOpen?: boolean;
+  onActiveViewChange?: (
+    tab: { label: string; description: string } | null,
+  ) => void;
 }) {
   const [route, setRoute] = useState(""),
     [effect, setEffect] = useState(""),
@@ -4194,11 +4897,12 @@ function FlowView({
   const routeLabel = (path: string) => {
     const routeStates = data.states.filter((state) => state.routeKey === path);
     const state =
-      routeStates.find((candidate) => candidate.title.trim()) ?? routeStates[0];
+      routeStates.find((candidate) => candidate.title?.trim()) ??
+      routeStates[0];
     const routeTitle = shortPath(path) === "/" ? "/ overview" : shortPath(path);
     if (routeLabelMode === "url") return state?.url || path;
     if (routeLabelMode === "page-title")
-      return state?.title.trim() || routeTitle;
+      return state?.title?.trim() || routeTitle;
     return routeTitle;
   };
   const effects = [
@@ -4802,6 +5506,22 @@ function FlowView({
   const activeFlowViewTabs = activeFlowViewGroup.modes
     .map((id) => allFlowViewTabs.find((tab) => tab.id === id))
     .filter((tab): tab is (typeof allFlowViewTabs)[number] => Boolean(tab));
+  const activeFlowViewTab = allFlowViewTabs.find((tab) => tab.id === viewMode);
+  useEffect(() => {
+    onActiveViewChange?.(
+      activeFlowViewTab
+        ? {
+            label: activeFlowViewTab.label,
+            description: activeFlowViewTab.description,
+          }
+        : null,
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewMode]);
+  useEffect(() => {
+    return () => onActiveViewChange?.(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const actionStateCount = new Set(
     timelineActions.flatMap((action) =>
       action.toStateId
@@ -8115,6 +8835,100 @@ function useDialogFocus() {
   }, []);
   return ref;
 }
+type ExplorationLevel = "quick" | "standard" | "thorough" | "custom";
+type ExplorationLevelValues = Pick<
+  ScanConfig,
+  | "concurrency"
+  | "maxDepth"
+  | "maxStates"
+  | "maxActions"
+  | "maxDurationMinutes"
+  | "actionTimeoutMs"
+  | "settleMs"
+  | "navigationIntervalMs"
+  | "maxBrowserMemoryMB"
+  | "maxBrowserCpuPercent"
+>;
+const EXPLORATION_LEVELS: Record<
+  ExplorationLevel,
+  { label: string; description: string; values?: ExplorationLevelValues }
+> = {
+  quick: {
+    label: "Quick",
+    description:
+      "A fast pass over the top-level routes. Good for a sanity check.",
+    values: {
+      concurrency: 4,
+      maxDepth: 3,
+      maxStates: 60,
+      maxActions: 300,
+      maxDurationMinutes: 8,
+      actionTimeoutMs: 8000,
+      settleMs: 200,
+      navigationIntervalMs: 100,
+      maxBrowserMemoryMB: 4096,
+      maxBrowserCpuPercent: 800,
+    },
+  },
+  standard: {
+    label: "Standard",
+    description: "Balanced breadth and runtime for most applications.",
+    values: {
+      // Coverage (maxActions/maxStates) scales 10x per tier — that's the
+      // actual "how much do we touch" knob. concurrency stays flat:
+      // workers each own a route branch (see routeShard in
+      // packages/storage/src/index.ts) and share one login session, so
+      // more workers doesn't mean more coverage, just more chances to
+      // collide. maxDepth scales gently (~2x) since it's bounded by the
+      // site's own structure, not a target to maximize. maxDurationMinutes
+      // is sized so the action/state budget runs out first, not the
+      // clock.
+      concurrency: 4,
+      maxDepth: 6,
+      maxStates: 600,
+      maxActions: 3000,
+      maxDurationMinutes: 45,
+      actionTimeoutMs: 10000,
+      settleMs: 250,
+      navigationIntervalMs: 100,
+      maxBrowserMemoryMB: 4096,
+      maxBrowserCpuPercent: 800,
+    },
+  },
+  thorough: {
+    label: "Thorough",
+    description:
+      "Wide, deep exploration for large or complex applications. Takes longer.",
+    values: {
+      concurrency: 6,
+      maxDepth: 12,
+      maxStates: 6000,
+      maxActions: 30000,
+      maxDurationMinutes: 300,
+      actionTimeoutMs: 15000,
+      settleMs: 300,
+      navigationIntervalMs: 50,
+      maxBrowserMemoryMB: 8192,
+      maxBrowserCpuPercent: 1200,
+    },
+  },
+  custom: {
+    label: "Custom",
+    description: "Set every exploration limit yourself.",
+  },
+};
+function detectExplorationLevel(config: ScanConfig): ExplorationLevel {
+  for (const key of ["quick", "standard", "thorough"] as const) {
+    const values = EXPLORATION_LEVELS[key].values as ExplorationLevelValues;
+    if (
+      (Object.keys(values) as (keyof ExplorationLevelValues)[]).every(
+        (field) => config[field] === values[field],
+      )
+    )
+      return key;
+  }
+  return "custom";
+}
 function NewScan({
   projectId,
   projectName,
@@ -8142,7 +8956,16 @@ function NewScan({
     seeds: [],
     authStatePath: undefined,
     formValues: [],
+    setupSteps: projectConfig.setupSteps || [],
   }));
+  const [level, setLevel] = useState<ExplorationLevel>(() =>
+    detectExplorationLevel(config),
+  );
+  const applyLevel = (next: ExplorationLevel) => {
+    setLevel(next);
+    const values = EXPLORATION_LEVELS[next].values;
+    if (values) setConfig((current) => ({ ...current, ...values }));
+  };
   const [jsonDrafts, setJsonDrafts] = useState(() => ({
     actionAllowlist: JSON.stringify(projectConfig.actionAllowlist, null, 2),
     formSubmitAllowlist: JSON.stringify(
@@ -8151,8 +8974,8 @@ function NewScan({
       2,
     ),
     formValues: "[]",
-    networkWriteAllowlist: JSON.stringify(
-      projectConfig.networkWriteAllowlist,
+    networkWriteBlocklist: JSON.stringify(
+      projectConfig.networkWriteBlocklist,
       null,
       2,
     ),
@@ -8160,7 +8983,15 @@ function NewScan({
   const [advancedJson, setAdvancedJson] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const steps = ["Target", "Exploration", "Safety & evidence", "Advanced"];
+  const [showAuthCapture, setShowAuthCapture] = useState(false);
+  const [authCaptureVersion, setAuthCaptureVersion] = useState(0);
+  const steps = [
+    "Target",
+    "Setup steps",
+    "Exploration",
+    "Safety & evidence",
+    "Advanced",
+  ];
   const update = <K extends keyof ScanConfig>(key: K, value: ScanConfig[K]) =>
     setConfig((current) => ({ ...current, [key]: value }));
   const lines = (values: string[]) => values.join("\n");
@@ -8289,6 +9120,9 @@ function NewScan({
         <div
           className="wizard-progress"
           aria-label={`Step ${step + 1} of ${steps.length}`}
+          style={{
+            gridTemplateColumns: `repeat(${steps.length}, minmax(0, 1fr))`,
+          }}
         >
           {steps.map((label, index) => (
             <button
@@ -8390,128 +9224,215 @@ function NewScan({
                     rows={3}
                   />
                   <small className="wizard-help">
-                    Only add origins that belong to this application and that
-                    you are authorized to scan.
+                    Leave empty to let discovery follow any origin the app
+                    itself loads or links to (needed for third-party scripts
+                    many apps depend on to render). Add origins here only to
+                    restrict the crawl to exactly this application's own
+                    domains.
                   </small>
                 </label>
-                <label>
-                  Saved browser session path <span>Optional</span>
-                  <input
-                    value={config.authStatePath || ""}
-                    onChange={(e) =>
-                      update("authStatePath", e.target.value || undefined)
-                    }
-                    placeholder=".local/auth-state.json"
+                <div className="form-row-stack">
+                  <span className="form-row-label">
+                    Login session <span>Optional · for apps behind auth</span>
+                  </span>
+                  <AuthCaptureList
+                    projectId={projectId}
+                    selectedPath={config.authStatePath}
+                    onSelect={(path) => update("authStatePath", path)}
+                    refreshKey={authCaptureVersion}
                   />
+                  <button
+                    type="button"
+                    className="button"
+                    onClick={() => setShowAuthCapture(true)}
+                  >
+                    <KeyRound size={14} />
+                    Capture a new login session
+                  </button>
                   <small className="wizard-help">
-                    Use a local Playwright storage-state file. Session data
-                    stays in your local workspace.
+                    Opens a private browser window so you can log into{" "}
+                    {projectUrl} yourself; the resulting session is saved and
+                    offered here for future discovery runs.
                   </small>
-                </label>
+                  <details className="auth-capture-manual">
+                    <summary>Or paste a session file path manually</summary>
+                    <input
+                      value={config.authStatePath || ""}
+                      onChange={(e) =>
+                        update("authStatePath", e.target.value || undefined)
+                      }
+                      placeholder=".local/auth-state.json"
+                    />
+                  </details>
+                </div>
               </div>
             )}
             {step === 1 && (
               <div className="wizard-section">
                 <div className="wizard-section-heading">
-                  <h3>Set the exploration budget</h3>
+                  <h3>Run setup steps before discovery begins</h3>
                   <p>
-                    These limits control scan breadth, browser parallelism, and
-                    runtime.
+                    For sites where a saved session alone isn't enough — a
+                    consent banner, a workspace picker, a multi-field login —
+                    add the steps to click through once, in order. They run
+                    before any discovery worker starts, and their effect
+                    (cookies, local storage) carries into the whole run the same
+                    way a captured login session does.
                   </p>
                 </div>
-                <div className="form-row">
-                  {numberField(
-                    "Browser workers",
-                    "concurrency",
-                    config.concurrency,
-                    1,
-                    16,
-                    "Parallel browser sessions",
-                  )}
-                  {numberField(
-                    "Maximum depth",
-                    "maxDepth",
-                    config.maxDepth,
-                    0,
-                    20,
-                    "Actions away from a starting route",
-                  )}
-                </div>
-                <div className="form-row">
-                  {numberField(
-                    "State limit",
-                    "maxStates",
-                    config.maxStates,
-                    1,
-                    10000,
-                    "Distinct UI states to save",
-                  )}
-                  {numberField(
-                    "Action limit",
-                    "maxActions",
-                    config.maxActions,
-                    1,
-                    50000,
-                    "Controls to inspect",
-                  )}
-                </div>
-                <div className="form-row">
-                  {numberField(
-                    "Time limit",
-                    "maxDurationMinutes",
-                    config.maxDurationMinutes,
-                    1,
-                    240,
-                    "Minutes",
-                  )}
-                  {numberField(
-                    "Action timeout",
-                    "actionTimeoutMs",
-                    config.actionTimeoutMs,
-                    500,
-                    60000,
-                    "Milliseconds",
-                  )}
-                </div>
-                <div className="form-row">
-                  {numberField(
-                    "Page settle time",
-                    "settleMs",
-                    config.settleMs,
-                    50,
-                    3000,
-                    "Wait after an action · milliseconds",
-                  )}
-                  {numberField(
-                    "Navigation interval",
-                    "navigationIntervalMs",
-                    config.navigationIntervalMs,
-                    0,
-                    60000,
-                    "Milliseconds between navigations",
-                  )}
-                </div>
-                <div className="form-row">
-                  {numberField(
-                    "Browser memory cap",
-                    "maxBrowserMemoryMB",
-                    config.maxBrowserMemoryMB,
-                    128,
-                    65536,
-                    "MB",
-                  )}
-                  {numberField(
-                    "Browser CPU cap",
-                    "maxBrowserCpuPercent",
-                    config.maxBrowserCpuPercent,
-                    50,
-                    6400,
-                    "Percent across workers",
-                  )}
-                </div>
+                <SetupStepsEditor
+                  steps={config.setupSteps}
+                  onChange={(setupSteps) => update("setupSteps", setupSteps)}
+                />
               </div>
             )}
             {step === 2 && (
+              <div className="wizard-section">
+                <div className="wizard-section-heading">
+                  <h3>Set the exploration budget</h3>
+                  <p>
+                    Choose a preset for scan breadth, browser parallelism, and
+                    runtime, or switch to Custom to set each limit yourself.
+                  </p>
+                </div>
+                <div
+                  className="level-picker"
+                  role="radiogroup"
+                  aria-label="Exploration level"
+                >
+                  {(Object.keys(EXPLORATION_LEVELS) as ExplorationLevel[]).map(
+                    (key) => (
+                      <button
+                        type="button"
+                        key={key}
+                        className={`level-card${level === key ? " active" : ""}`}
+                        role="radio"
+                        aria-checked={level === key}
+                        onClick={() => applyLevel(key)}
+                      >
+                        <strong>{EXPLORATION_LEVELS[key].label}</strong>
+                        <small>{EXPLORATION_LEVELS[key].description}</small>
+                      </button>
+                    ),
+                  )}
+                </div>
+                {level === "custom" ? (
+                  <>
+                    <div className="form-row">
+                      {numberField(
+                        "Browser workers",
+                        "concurrency",
+                        config.concurrency,
+                        1,
+                        16,
+                        "Parallel browser sessions",
+                      )}
+                      {numberField(
+                        "Maximum depth",
+                        "maxDepth",
+                        config.maxDepth,
+                        0,
+                        20,
+                        "Actions away from a starting route",
+                      )}
+                    </div>
+                    <div className="form-row">
+                      {numberField(
+                        "State limit",
+                        "maxStates",
+                        config.maxStates,
+                        1,
+                        10000,
+                        "Distinct UI states to save",
+                      )}
+                      {numberField(
+                        "Action limit",
+                        "maxActions",
+                        config.maxActions,
+                        1,
+                        50000,
+                        "Controls to inspect",
+                      )}
+                    </div>
+                    <div className="form-row">
+                      {numberField(
+                        "Time limit",
+                        "maxDurationMinutes",
+                        config.maxDurationMinutes,
+                        1,
+                        360,
+                        "Minutes",
+                      )}
+                      {numberField(
+                        "Action timeout",
+                        "actionTimeoutMs",
+                        config.actionTimeoutMs,
+                        500,
+                        60000,
+                        "Milliseconds",
+                      )}
+                    </div>
+                    <div className="form-row">
+                      {numberField(
+                        "Page settle time",
+                        "settleMs",
+                        config.settleMs,
+                        50,
+                        3000,
+                        "Wait after an action · milliseconds",
+                      )}
+                      {numberField(
+                        "Navigation interval",
+                        "navigationIntervalMs",
+                        config.navigationIntervalMs,
+                        0,
+                        60000,
+                        "Milliseconds between navigations",
+                      )}
+                    </div>
+                    <div className="form-row">
+                      {numberField(
+                        "Browser memory cap",
+                        "maxBrowserMemoryMB",
+                        config.maxBrowserMemoryMB,
+                        128,
+                        65536,
+                        "MB",
+                      )}
+                      {numberField(
+                        "Browser CPU cap",
+                        "maxBrowserCpuPercent",
+                        config.maxBrowserCpuPercent,
+                        50,
+                        6400,
+                        "Percent across workers",
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <div className="level-summary">
+                    <span>
+                      <strong>{config.concurrency}</strong> workers
+                    </span>
+                    <span>
+                      <strong>{config.maxDepth}</strong> max depth
+                    </span>
+                    <span>
+                      <strong>{config.maxStates.toLocaleString()}</strong>{" "}
+                      states
+                    </span>
+                    <span>
+                      <strong>{config.maxActions.toLocaleString()}</strong>{" "}
+                      actions
+                    </span>
+                    <span>
+                      <strong>{config.maxDurationMinutes}</strong> min runtime
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+            {step === 3 && (
               <div className="wizard-section">
                 <div className="wizard-section-heading">
                   <h3>Choose what to run and record</h3>
@@ -8546,7 +9467,26 @@ function NewScan({
                     "captureTracesOnFailure",
                     config.captureTracesOnFailure,
                   )}
+                  {toggle(
+                    "Live worker view",
+                    "Watch each worker's browser as it explores, updated a few times a second.",
+                    "streamWorkers",
+                    config.streamWorkers,
+                  )}
                 </div>
+                {config.streamWorkers && (
+                  <p className="wizard-warning">
+                    <TriangleAlert size={15} />
+                    <span>
+                      Live view screenshots every worker continuously for as
+                      long as this tab is open. Expect slower exploration and
+                      higher CPU/memory use, scaling with{" "}
+                      <strong>{config.concurrency} concurrent workers</strong>.
+                      Leave this off for unattended or resource-constrained
+                      runs.
+                    </span>
+                  </p>
+                )}
                 <h4 className="wizard-subheading">Evidence and replay</h4>
                 <div className="form-row">
                   <label>
@@ -8646,7 +9586,7 @@ function NewScan({
                 </div>
               </div>
             )}
-            {step === 3 && (
+            {step === 4 && (
               <div className="wizard-section">
                 <div className="wizard-section-heading">
                   <h3>Fine-tune discovery rules</h3>
@@ -8681,13 +9621,13 @@ function NewScan({
                   help="Use non-sensitive sample values. Do not put passwords, tokens, or real customer data here."
                 />
                 <JsonArrayField
-                  label="Permitted network writes"
-                  value={jsonDrafts.networkWriteAllowlist}
-                  onChange={(v) => updateJson("networkWriteAllowlist", v)}
+                  label="Blocked network writes"
+                  value={jsonDrafts.networkWriteBlocklist}
+                  onChange={(v) => updateJson("networkWriteBlocklist", v)}
                   placeholder={
-                    '[{"url":"https://api.example.com/search","method":"POST"}]'
+                    '[{"url":"https://api.example.com/delete-account","method":"POST"}]'
                   }
-                  help="Allow only known safe write requests. Safe mode still applies to UI actions."
+                  help="POST/PUT/PATCH/DELETE requests are allowed by default and shown in the activity log as they happen — add one here only to block a specific request on future runs. Safe mode still applies to UI actions."
                 />
                 <label>
                   Additional configuration overrides{" "}
@@ -8766,6 +9706,18 @@ function NewScan({
           </div>
         </form>
       </section>
+      {showAuthCapture && (
+        <AuthCaptureWizard
+          projectId={projectId}
+          projectUrl={projectUrl}
+          onClose={() => setShowAuthCapture(false)}
+          onCaptured={(captured: AuthCapture) => {
+            if (captured.path) update("authStatePath", captured.path);
+            setAuthCaptureVersion((v) => v + 1);
+            setShowAuthCapture(false);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -8797,8 +9749,48 @@ function JsonArrayField({
     </label>
   );
 }
+// Catches render errors that would otherwise just blank the page, and shows
+// the message + component stack in plain text so it can be copied straight
+// out of the page without opening devtools.
+class AppErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { error?: Error; componentStack?: string }
+> {
+  state: { error?: Error; componentStack?: string } = {};
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    this.setState({ componentStack: info.componentStack ?? undefined });
+  }
+  render() {
+    if (this.state.error)
+      return (
+        <div
+          style={{
+            padding: 24,
+            fontFamily: "ui-monospace, monospace",
+            whiteSpace: "pre-wrap",
+            color: "#1a1a1a",
+            background: "#fff",
+          }}
+        >
+          <h2 style={{ marginTop: 0 }}>Something broke in the dashboard</h2>
+          <p>
+            Copy everything below and share it — it has the file/line that
+            crashed.
+          </p>
+          <pre>{this.state.error.stack || this.state.error.message}</pre>
+          {this.state.componentStack && <pre>{this.state.componentStack}</pre>}
+        </div>
+      );
+    return this.props.children;
+  }
+}
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <AuthGate />
+    <AppErrorBoundary>
+      <AuthGate />
+    </AppErrorBoundary>
   </React.StrictMode>,
 );

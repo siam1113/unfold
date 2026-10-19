@@ -421,8 +421,15 @@ function NavigationProvenance({
             item.event.startsWith("history:") ||
             item.event.startsWith("popup_") ||
             item.event.startsWith("external_navigation"),
-        ) || action.browserEvidence?.events.some((event) =>
-          ["navigation_request", "navigation_start", "redirect", "tab_opened", "tab_activated"].includes(event.kind),
+        ) ||
+        action.browserEvidence?.events.some((event) =>
+          [
+            "navigation_request",
+            "navigation_start",
+            "redirect",
+            "tab_opened",
+            "tab_activated",
+          ].includes(event.kind),
         ),
       ),
     )
@@ -436,8 +443,12 @@ function NavigationProvenance({
       );
       const browserEvents = action.browserEvidence?.events || [];
       const redirect = browserEvents.some((item) => item.kind === "redirect");
-      const navRequest = browserEvents.find((item) => item.kind === "navigation_request");
-      const browserTraversal = browserEvents.find((item) => item.kind === "navigation_start");
+      const navRequest = browserEvents.find(
+        (item) => item.kind === "navigation_request",
+      );
+      const browserTraversal = browserEvents.find(
+        (item) => item.kind === "navigation_start",
+      );
       const category = redirect
         ? "redirect response"
         : navRequest
@@ -445,14 +456,14 @@ function NavigationProvenance({
           : browserTraversal
             ? "browser navigation traversal"
             : popupHandoff
-        ? "popup handoff"
-        : history.length
-          ? "History API"
-          : action.toStateId ||
-              action.afterUrl ||
-              provenanceActionIds.has(action.id)
-            ? "action"
-            : "unknown source";
+              ? "popup handoff"
+              : history.length
+                ? "History API"
+                : action.toStateId ||
+                    action.afterUrl ||
+                    provenanceActionIds.has(action.id)
+                  ? "action"
+                  : "unknown source";
       return {
         key: `action:${action.id}`,
         category,
@@ -461,14 +472,24 @@ function NavigationProvenance({
         signals: [
           ...signals,
           ...browserEvents.flatMap((item) => {
-            if (!["navigation_request", "navigation_start", "redirect", "tab_opened", "tab_activated"].includes(item.kind)) return [];
-            const detail = item.kind === "redirect"
-              ? `redirect HTTP ${item.status || "unknown"} · ${item.origin || "origin unknown"}`
-              : item.kind === "navigation_request"
-                ? `navigation ${item.navigationReason || "reason unknown"} · ${item.disposition || "unknown"}`
-                : item.kind === "navigation_start"
-                  ? `browser ${item.navigationType || "unknown"}`
-                  : item.kind;
+            if (
+              ![
+                "navigation_request",
+                "navigation_start",
+                "redirect",
+                "tab_opened",
+                "tab_activated",
+              ].includes(item.kind)
+            )
+              return [];
+            const detail =
+              item.kind === "redirect"
+                ? `redirect HTTP ${item.status || "unknown"} · ${item.origin || "origin unknown"}`
+                : item.kind === "navigation_request"
+                  ? `navigation ${item.navigationReason || "reason unknown"} · ${item.disposition || "unknown"}`
+                  : item.kind === "navigation_start"
+                    ? `browser ${item.navigationType || "unknown"}`
+                    : item.kind;
             return [{ tabId: item.tabId || "tab unknown", event: detail }];
           }),
         ],
@@ -876,16 +897,28 @@ function OriginBoundary({
           action,
         }),
       );
-      const browserOrigins = [...new Set((action.browserEvidence?.events || [])
-        .filter((event) => event.kind === "network_request" || event.kind === "network_response")
-        .map((event) => event.origin ? hostOnly(event.origin) : "")
-        .filter((host) => host && host.toLowerCase() !== baseHost.toLowerCase()))];
-      browserOrigins.forEach((origin) => row.boundaries.push({
-        kind: "observed-origin",
-        fromHost: beforeHost || undefined,
-        toHost: origin,
-        action,
-      }));
+      const browserOrigins = [
+        ...new Set(
+          (action.browserEvidence?.events || [])
+            .filter(
+              (event) =>
+                event.kind === "network_request" ||
+                event.kind === "network_response",
+            )
+            .map((event) => (event.origin ? hostOnly(event.origin) : ""))
+            .filter(
+              (host) => host && host.toLowerCase() !== baseHost.toLowerCase(),
+            ),
+        ),
+      ];
+      browserOrigins.forEach((origin) =>
+        row.boundaries.push({
+          kind: "observed-origin",
+          fromHost: beforeHost || undefined,
+          toHost: origin,
+          action,
+        }),
+      );
       const navigationSignals = signals.filter((signal) =>
         signal.event.startsWith("external_navigation"),
       );

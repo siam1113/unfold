@@ -2,8 +2,12 @@ import { RobotsPolicy } from "./robots.js";
 import { BrowserResources, resourcePressure } from "./resources.js";
 import { ConfigSchema } from "../../shared/src/index.js";
 import { chromium } from "playwright";
-import { Store } from "../../storage/src/index.js";
+import { existsSync } from "node:fs";
+import { mkdir, writeFile, chmod } from "node:fs/promises";
+import { resolve, dirname } from "node:path";
+import { Store, artifactRoot } from "../../storage/src/index.js";
 import { BrowserWorker, type ProbeResult } from "../../worker/src/index.js";
+import { runSetupSteps } from "../../worker/src/workflow-runner.js";
 import { hash, redact } from "../../analysis/src/index.js";
 import { allowedUrl, riskyUrl, decide } from "./policy.js";
 import type {
@@ -28,10 +32,17 @@ function alive(pid?: number) {
 const activeRuns = new Set<string>();
 export class Coordinator {
   private active = activeRuns;
+  private liveWorkers = new Map<string, BrowserWorker>();
   constructor(public store: Store) {}
   pause(id: string) {
     const r = this.store.run(id);
     if (r.status === "running") this.store.updateRun(id, { status: "pausing" });
+  }
+  /** Screenshot of a worker slot's current page, for a run with streamWorkers enabled. undefined if the run isn't live or the slot is idle. */
+  screenshotWorker(id: string, worker: number): Promise<Buffer | undefined> {
+    return (
+      this.liveWorkers.get(id)?.screenshot(worker) ?? Promise.resolve(undefined)
+    );
   }
   async start(id: string): Promise<Run> {
     if (this.active.has(id)) throw new Error("Run is already active");
@@ -93,7 +104,7 @@ export class Coordinator {
       .filter((t) => t.kind === "action")
       .reduce((sum, t) => sum + t.attempts, 0);
     let stopReason: string | undefined;
-    let adaptive = c.networkWriteAllowlist.length ? 1 : c.concurrency;
+    let adaptive = c.concurrency;
     const nextNavigation = new Map<string, number>();
     const throttle = async (origin: string) => {
       const now = Date.now();
@@ -117,6 +128,64 @@ export class Coordinator {
         headless: true,
         executablePath: process.env.UNFOLD_BROWSER_EXECUTABLE,
       });
+      if (c.setupSteps.length) {
+        this.store.event(
+          id,
+          "info",
+          `Running ${c.setupSteps.length} setup step${c.setupSteps.length === 1 ? "" : "s"} before discovery begins`,
+        );
+        // Seeded with any already-captured login session so setup steps run
+        // on top of it (e.g. dismiss a banner after login), not instead of
+        // it. Same existsSync guard as worker/index.ts's probe() context.
+        const setupContext = await browser.newContext({
+          storageState:
+            c.authStatePath && existsSync(c.authStatePath)
+              ? c.authStatePath
+              : undefined,
+        });
+        // Same budget a regular discovery action gets (worker/index.ts:931-932)
+        // — otherwise a bad selector in a setup step hangs on Playwright's
+        // 30s default instead of failing fast with a clear error.
+        setupContext.setDefaultTimeout(c.actionTimeoutMs);
+        setupContext.setDefaultNavigationTimeout(c.actionTimeoutMs);
+        const setupPage = await setupContext.newPage();
+        try {
+          await runSetupSteps(
+            setupContext,
+            setupPage,
+            c.baseUrl,
+            c.setupSteps,
+            (message) => this.store.event(id, "info", message),
+          );
+          const authStatePath = resolve(
+            artifactRoot(),
+            "runs",
+            id,
+            "setup-state.json",
+          );
+          await mkdir(dirname(authStatePath), {
+            recursive: true,
+            mode: 0o700,
+          });
+          await writeFile(
+            authStatePath,
+            JSON.stringify(await setupContext.storageState()),
+          );
+          await chmod(authStatePath, 0o600);
+          c.authStatePath = authStatePath;
+          this.store.updateRun(id, { config: c });
+          this.store.event(id, "info", "Setup steps complete");
+        } catch (error) {
+          // runSetupSteps's own error already names the step index/type;
+          // this just makes clear the run failed during setup rather than
+          // during discovery.
+          throw new Error(
+            `Setup failed — ${error instanceof Error ? error.message : String(error)}`,
+          );
+        } finally {
+          await setupContext.close().catch(() => {});
+        }
+      }
       const monitor = new BrowserResources(browser);
       const sample = async () => {
         try {
@@ -165,6 +234,7 @@ export class Coordinator {
         robots,
         resources,
       );
+      if (c.streamWorkers) this.liveWorkers.set(id, worker);
       const loop = async (index: number) => {
         while (true) {
           const current = this.store.run(id);
@@ -185,7 +255,7 @@ export class Coordinator {
             return;
           }
           if (index > adaptive) {
-            if (inFlight === 0) return;
+            if (inFlight === 0 && !this.store.hasPending(id)) return;
             await sleep(100);
             continue;
           }
@@ -195,7 +265,11 @@ export class Coordinator {
             (c.maxDepth + 3) * (c.actionTimeoutMs + 5000),
           );
           if (!task) {
-            if (inFlight === 0) return;
+            // Not "no work for me right now" — lease() already shards by
+            // route, so a miss here can mean a sibling worker just hasn't
+            // had its turn yet to claim the task this worker's branch is
+            // waiting to grow from (see hasPending()'s doc comment).
+            if (inFlight === 0 && !this.store.hasPending(id)) return;
             await sleep(75);
             continue;
           }
@@ -315,6 +389,7 @@ export class Coordinator {
       this.store.updateRun(id, { resources });
       await browser?.close();
       this.active.delete(id);
+      this.liveWorkers.delete(id);
     }
   }
   private queueRoute(id: string, url: string, depth: number) {
@@ -353,11 +428,6 @@ export class Coordinator {
           ? "hover"
           : "click";
       const decision = decide(element, state.url, c, action);
-      if (input && !value) {
-        decision.allowed = false;
-        decision.rule = "no-synthetic-value";
-        decision.reason = "No synthetic value configured for this field";
-      }
       if (
         element.isSubmit &&
         obs.elements.some(

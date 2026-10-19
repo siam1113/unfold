@@ -1,0 +1,76 @@
+.automation-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  /* The .run-page padding this also carries only sets side/top insets, not
+     a height — give the column a real working height (capped, viewport-
+     aware, matching the house idiom used elsewhere for similar panels) so
+     flex:1 children (the Framework tab's editor in particular) have actual
+     room instead of collapsing to their content's minimum height. */
+  min-height: min(760px, calc(100vh - 230px));
+}
+.automation-tabs {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 4px;
+  border-bottom: 1px solid var(--line);
+}
+/* Direct-child selector — the tab-row look (underline, muted color) is only
+   for the actual Workflow/Framework/fullscreen buttons. Anything a tab
+   portals into .automation-tab-actions (below) is a grandchild, not a
+   direct child, so it's unaffected and free to style itself. */
+.automation-tabs > button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 13px;
+}
+.automation-tabs > button.active {
+  color: var(--ink);
+  border-bottom-color: var(--accent);
+}
+.automation-tab-actions {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  /* Group everything a tab portals in here (framework badge, package-manager
+     switch, Execute, etc.) at the far right of the row, right before the
+     fullscreen toggle — not left-aligned immediately after the tabs. */
+  justify-content: flex-end;
+  /* Breathing room between each portaled item (badge / pm switch / Execute),
+     not just a tight 4-6px — .automation-tabs' own 4px tab-button gap is
+     too cramped once this container is full of icon buttons. */
+  gap: 14px;
+  min-width: 0;
+  padding: 6px 10px;
+}
+.automation-fullscreen-toggle {
+  /* Same row as the Workflow/Framework tabs, pushed to the far right.
+     margin-left:auto has no free space to claim once .automation-tab-actions
+     (flex:1) is already filling the row, so the real separation from the
+     action cluster comes from this explicit gap instead. */
+  margin-left: 14px;
+  align-self: center;
+}
+.automation-tab-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+/* Fullscreen targets this panel alone (see flow-automation-views.tsx) — the
+   native Fullscreen API hides the page heading and tab switcher outside it,
+   so this element has to stand on its own as a full page while fullscreen:
+   real height, its own background and inset padding. */
+.automation-tab-panel.is-fullscreen {
+  height: 100vh;
+  padding: 20px 28px;
+  background: var(--canvas);
+  overflow: auto;
+}

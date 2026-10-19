@@ -11,12 +11,16 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "npm run build:engine && concurrently -k -n api,ui,fixture -c blue,magenta,cyan \"node --env-file-if-exists=.env --env-file-if-exists=.env.local dist/engine/apps/server/src/index.js\" \"npm run dashboard\" \"node dist/engine/apps/fixture/server.js\"",
-    "server": "npm run build:engine --silent && node --env-file-if-exists=.env --env-file-if-exists=.env.local dist/engine/apps/server/src/index.js",
+    "dev": "npm run build:engine && npm run extension:build --silent && concurrently -k -n api,ui,fixture -c blue,magenta,cyan \"node --env-file-if-exists=.env --env-file-if-exists=.env.local dist/engine/apps/server/src/index.js\" \"npm run dashboard\" \"node dist/engine/apps/fixture/server.js\"",
+    "server": "npm run build:engine --silent && npm run extension:build --silent && node --env-file-if-exists=.env --env-file-if-exists=.env.local dist/engine/apps/server/src/index.js",
     "dashboard": "vite --config apps/dashboard/vite.config.ts",
+    "marketing": "vite --config apps/marketing/vite.config.ts",
+    "marketing:build": "vite build --config apps/marketing/vite.config.ts",
+    "extension:watch": "node apps/extension/build.mjs --watch",
+    "extension:build": "node apps/extension/build.mjs",
     "fixture": "npm run build:engine --silent && node dist/engine/apps/fixture/server.js",
     "appscan": "npm run build:engine --silent && node dist/engine/apps/cli/src/index.js",
-    "build": "npm run typecheck && npm run build:engine && vite build --config apps/dashboard/vite.config.ts",
+    "build": "npm run typecheck && npm run build:engine && npm run extension:build && vite build --config apps/dashboard/vite.config.ts",
     "start": "NODE_ENV=production node --env-file-if-exists=.env --env-file-if-exists=.env.local dist/engine/apps/server/src/index.js",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
@@ -32,6 +36,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.32.1",
+    "@monaco-editor/react": "^4.7.0",
     "commander": "14.0.3",
     "express": "5.3.0",
     "fflate": "0.8.3",
@@ -41,6 +46,7 @@
     "react-dom": "19.2.8",
     "react-router": "7.18.4",
     "reactflow": "11.11.4",
+    "simple-git": "^4.0.2",
     "zod": "4.6.6"
   },
   "devDependencies": {

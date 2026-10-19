@@ -27,11 +27,59 @@ import {
   ProjectInputSchema,
   UserSettingsSchema,
   type UserSettings,
+  BrowseSessionSchema,
+  type BrowseSession,
+  BrowseEventSchema,
+  type BrowseEvent,
+  AuthCaptureSchema,
+  type AuthCapture,
+  AutomationWorkflowSchema,
+  type AutomationWorkflow,
+  WorkflowRunSchema,
+  type WorkflowRun,
+  FrameworkProjectSchema,
+  type FrameworkProject,
+  TestRunSchema,
+  type TestRun,
+  PackageOperationSchema,
+  type PackageOperation,
 } from "../../shared/src/index.js";
 import { equivalent } from "../../analysis/src/index.js";
+import {
+  CapabilitySchema,
+  type Capability,
+  FlowSchema,
+  type Flow,
+  EvidenceSchema,
+  type Evidence,
+  VerificationRunSchema,
+  type VerificationRun,
+} from "../../capability-core/src/types.js";
 export const dataRoot = () => resolve(process.env.UNFOLD_DATA_DIR || ".local");
 export const artifactRoot = () =>
   resolve(process.env.UNFOLD_ARTIFACT_DIR || "artifacts");
+// Which worker (1-indexed) owns a given URL's branch of the site, by
+// hashing its top-level path segment. Every worker shares one login
+// session (one authStatePath), so two workers landing on the same branch
+// concurrently (e.g. both touching the same patient record) silently
+// corrupt each other's view of server-side session state — not a timing
+// bug, a structural one. Pinning each branch to one worker removes the
+// collision instead of retrying around it.
+export function routeShard(url: string, concurrency: number): number {
+  const segment = (() => {
+    try {
+      return new URL(url).pathname.split("/").filter(Boolean)[0] || "";
+    } catch {
+      return url;
+    }
+  })();
+  let h = 2166136261;
+  for (let i = 0; i < segment.length; i++)
+    h = Math.imul(h ^ segment.charCodeAt(i), 16777619);
+  // Worker slots are 1-indexed everywhere else in this codebase (lease(),
+  // events, currentPages) — match that instead of returning 0-indexed.
+  return ((h >>> 0) % concurrency) + 1;
+}
 export class Store {
   db: DatabaseType;
   constructor(path = resolve(dataRoot(), "unfold.sqlite")) {
@@ -55,7 +103,34 @@ export class Store {
    CREATE TABLE IF NOT EXISTS events(id INTEGER PRIMARY KEY AUTOINCREMENT,run_id TEXT NOT NULL,data TEXT NOT NULL);
    CREATE TABLE IF NOT EXISTS auth_sessions(id TEXT PRIMARY KEY,user_id TEXT NOT NULL,data TEXT NOT NULL,expires_at INTEGER NOT NULL);
    CREATE TABLE IF NOT EXISTS auth_transactions(state_hash TEXT PRIMARY KEY,data TEXT NOT NULL,expires_at INTEGER NOT NULL);
+   CREATE TABLE IF NOT EXISTS api_tokens(id TEXT PRIMARY KEY,owner_id TEXT NOT NULL,token_hash TEXT NOT NULL UNIQUE,label TEXT NOT NULL,created_at TEXT NOT NULL,last_used_at TEXT);
+   CREATE INDEX IF NOT EXISTS api_token_owners ON api_tokens(owner_id);
    CREATE TABLE IF NOT EXISTS user_preferences(user_id TEXT PRIMARY KEY,data TEXT NOT NULL);
+   CREATE TABLE IF NOT EXISTS capabilities(id TEXT PRIMARY KEY,project_id TEXT NOT NULL,data TEXT NOT NULL);
+   CREATE INDEX IF NOT EXISTS capability_projects ON capabilities(project_id);
+   CREATE TABLE IF NOT EXISTS flows(id TEXT PRIMARY KEY,run_id TEXT NOT NULL,data TEXT NOT NULL);
+   CREATE INDEX IF NOT EXISTS flow_runs ON flows(run_id);
+   CREATE TABLE IF NOT EXISTS evidence(id TEXT PRIMARY KEY,run_id TEXT NOT NULL,verification_run_id TEXT,data TEXT NOT NULL);
+   CREATE INDEX IF NOT EXISTS evidence_runs ON evidence(run_id);
+   CREATE INDEX IF NOT EXISTS evidence_verification_runs ON evidence(verification_run_id);
+   CREATE TABLE IF NOT EXISTS verification_runs(id TEXT PRIMARY KEY,capability_id TEXT NOT NULL,data TEXT NOT NULL);
+   CREATE INDEX IF NOT EXISTS verification_run_capabilities ON verification_runs(capability_id);
+   CREATE TABLE IF NOT EXISTS browse_sessions(id TEXT PRIMARY KEY,project_id TEXT NOT NULL,owner_id TEXT NOT NULL,data TEXT NOT NULL);
+   CREATE INDEX IF NOT EXISTS browse_session_projects ON browse_sessions(project_id);
+   CREATE TABLE IF NOT EXISTS browse_events(id TEXT PRIMARY KEY,session_id TEXT NOT NULL,sequence INTEGER NOT NULL,data TEXT NOT NULL,UNIQUE(session_id,sequence));
+   CREATE INDEX IF NOT EXISTS browse_event_sessions ON browse_events(session_id,sequence);
+   CREATE TABLE IF NOT EXISTS auth_captures(id TEXT PRIMARY KEY,project_id TEXT NOT NULL,owner_id TEXT NOT NULL,data TEXT NOT NULL);
+   CREATE INDEX IF NOT EXISTS auth_capture_projects ON auth_captures(project_id);
+   CREATE TABLE IF NOT EXISTS automation_workflows(id TEXT PRIMARY KEY,project_id TEXT NOT NULL,owner_id TEXT NOT NULL,data TEXT NOT NULL);
+   CREATE INDEX IF NOT EXISTS automation_workflow_projects ON automation_workflows(project_id,owner_id);
+   CREATE TABLE IF NOT EXISTS workflow_runs(id TEXT PRIMARY KEY,workflow_id TEXT NOT NULL,owner_id TEXT NOT NULL,data TEXT NOT NULL);
+   CREATE INDEX IF NOT EXISTS workflow_run_workflows ON workflow_runs(workflow_id);
+   CREATE TABLE IF NOT EXISTS framework_projects(id TEXT PRIMARY KEY,project_id TEXT NOT NULL UNIQUE,owner_id TEXT NOT NULL,data TEXT NOT NULL);
+   CREATE TABLE IF NOT EXISTS framework_github_tokens(framework_project_id TEXT PRIMARY KEY,token TEXT NOT NULL);
+   CREATE TABLE IF NOT EXISTS test_runs(id TEXT PRIMARY KEY,framework_project_id TEXT NOT NULL,owner_id TEXT NOT NULL,data TEXT NOT NULL);
+   CREATE INDEX IF NOT EXISTS test_run_framework_projects ON test_runs(framework_project_id);
+   CREATE TABLE IF NOT EXISTS package_operations(id TEXT PRIMARY KEY,framework_project_id TEXT NOT NULL,owner_id TEXT NOT NULL,data TEXT NOT NULL);
+   CREATE INDEX IF NOT EXISTS package_operation_framework_projects ON package_operations(framework_project_id);
   `);
     const projectColumns = this.db
       .prepare("PRAGMA table_info(projects)")
@@ -176,6 +251,9 @@ export class Store {
         : {}),
       ...(changes.agentInstructions !== undefined
         ? { agentInstructions: changes.agentInstructions }
+        : {}),
+      ...(changes.appMcpHeaded !== undefined
+        ? { appMcpHeaded: changes.appMcpHeaded }
         : {}),
       updatedAt: new Date().toISOString(),
     });
@@ -476,20 +554,60 @@ export class Store {
   }
   lease(runId: string, worker: number, timeout: number): TaskLease | undefined {
     return this.transaction(() => {
-      const row = this.db
+      const concurrency = this.run(runId).config.concurrency;
+      // concurrency===1 has nothing to shard between; take the next task
+      // as before. Otherwise each worker only pulls tasks whose branch it
+      // owns (see routeShard) — never the whole shared frontier — so a
+      // worker whose branch is exhausted goes idle rather than reaching
+      // into another worker's in-progress branch.
+      if (concurrency <= 1) {
+        const row = this.db
+          .prepare(
+            "SELECT data FROM tasks WHERE run_id=? AND status='pending' ORDER BY depth ASC,priority DESC,rowid ASC LIMIT 1",
+          )
+          .get(runId);
+        if (!row) return;
+        const task: TaskLease = JSON.parse(row.data as string);
+        task.status = "leased";
+        task.worker = worker;
+        task.attempts++;
+        task.leaseUntil = Date.now() + timeout;
+        this.saveTask(task);
+        return task;
+      }
+      const rows = this.db
         .prepare(
-          "SELECT data FROM tasks WHERE run_id=? AND status='pending' ORDER BY depth ASC,priority DESC,rowid ASC LIMIT 1",
+          "SELECT data FROM tasks WHERE run_id=? AND status='pending' ORDER BY depth ASC,priority DESC,rowid ASC",
         )
-        .get(runId);
-      if (!row) return;
-      const task: TaskLease = JSON.parse(row.data as string);
-      task.status = "leased";
-      task.worker = worker;
-      task.attempts++;
-      task.leaseUntil = Date.now() + timeout;
-      this.saveTask(task);
-      return task;
+        .all(runId) as { data: string }[];
+      for (const row of rows) {
+        const task: TaskLease = JSON.parse(row.data);
+        if (routeShard(task.url, concurrency) !== worker) continue;
+        task.status = "leased";
+        task.worker = worker;
+        task.attempts++;
+        task.leaseUntil = Date.now() + timeout;
+        this.saveTask(task);
+        return task;
+      }
+      return undefined;
     });
+  }
+  // lease() is synchronous, so with sharding active a worker whose branch
+  // owns nothing yet can hit "no task" and check "is everything idle"
+  // before any OTHER worker has had a turn to lease the one task that
+  // exists (e.g. the very first seed route, which only one shard owns) —
+  // inFlight alone can't tell a truly-finished run apart from that
+  // startup race. Callers should only exit when inFlight is 0 *and*
+  // nothing is left pending anywhere, not just in their own shard.
+  hasPending(runId: string): boolean {
+    return (
+      this.db
+        .prepare(
+          "SELECT 1 FROM tasks WHERE run_id=? AND status='pending' LIMIT 1",
+        )
+        .get(runId) !== undefined
+    );
   }
   recover(runId: string) {
     for (const task of this.all<TaskLease>("tasks", runId))
@@ -622,6 +740,568 @@ export class Store {
     this.db
       .prepare("DELETE FROM auth_sessions WHERE expires_at<=?")
       .run(Date.now());
+  }
+  // Personal access tokens (apps/server/src/auth.ts's `requireAuth` extends
+  // its existing cookie/Auth0-JWT bearer paths with these — the Chrome
+  // extension (apps/extension) needs a credential it can hold long-term
+  // without an OAuth refresh flow running client-side, which neither a
+  // short-lived Auth0 access token nor a sensitive refresh token is safe
+  // for). Only ever a hash is stored, matching `auth_sessions`'s pattern —
+  // the plaintext token is shown to the user exactly once, at creation.
+  createApiToken(
+    id: string,
+    ownerId: string,
+    tokenHash: string,
+    label: string,
+    createdAt: string,
+  ) {
+    this.db
+      .prepare(
+        "INSERT INTO api_tokens(id,owner_id,token_hash,label,created_at) VALUES (?,?,?,?,?)",
+      )
+      .run(id, ownerId, tokenHash, label, createdAt);
+  }
+  apiTokenByHash(
+    tokenHash: string,
+  ): { id: string; owner_id: string; label: string } | undefined {
+    return this.db
+      .prepare("SELECT id,owner_id,label FROM api_tokens WHERE token_hash=?")
+      .get(tokenHash) as
+      | { id: string; owner_id: string; label: string }
+      | undefined;
+  }
+  touchApiToken(id: string) {
+    this.db
+      .prepare("UPDATE api_tokens SET last_used_at=? WHERE id=?")
+      .run(new Date().toISOString(), id);
+  }
+  apiTokens(
+    ownerId: string,
+  ): { id: string; label: string; createdAt: string; lastUsedAt?: string }[] {
+    return (
+      this.db
+        .prepare(
+          "SELECT id,label,created_at,last_used_at FROM api_tokens WHERE owner_id=? ORDER BY created_at DESC",
+        )
+        .all(ownerId) as {
+        id: string;
+        label: string;
+        created_at: string;
+        last_used_at: string | null;
+      }[]
+    ).map((row) => ({
+      id: row.id,
+      label: row.label,
+      createdAt: row.created_at,
+      lastUsedAt: row.last_used_at ?? undefined,
+    }));
+  }
+  /** Scoped to `ownerId` so a user can only ever revoke their own tokens. */
+  deleteApiToken(id: string, ownerId: string) {
+    this.db
+      .prepare("DELETE FROM api_tokens WHERE id=? AND owner_id=?")
+      .run(id, ownerId);
+  }
+  saveCapability(capability: Capability): Capability {
+    const parsed = CapabilitySchema.parse(capability);
+    this.db
+      .prepare(
+        "INSERT INTO capabilities(id,project_id,data) VALUES (?,?,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data",
+      )
+      .run(parsed.id, parsed.projectId, JSON.stringify(parsed));
+    return parsed;
+  }
+  capability(id: string): Capability | undefined {
+    const row = this.db
+      .prepare("SELECT data FROM capabilities WHERE id=?")
+      .get(id) as { data: string } | undefined;
+    return row ? CapabilitySchema.parse(JSON.parse(row.data)) : undefined;
+  }
+  capabilities(projectId: string): Capability[] {
+    return (
+      this.db
+        .prepare(
+          "SELECT data FROM capabilities WHERE project_id=? ORDER BY rowid DESC",
+        )
+        .all(projectId) as { data: string }[]
+    ).map((row) => CapabilitySchema.parse(JSON.parse(row.data)));
+  }
+  /** Also drops the capability's own verification history — it has no other owner once the capability is gone. */
+  deleteCapability(id: string): void {
+    this.db
+      .prepare("DELETE FROM verification_runs WHERE capability_id=?")
+      .run(id);
+    this.db.prepare("DELETE FROM capabilities WHERE id=?").run(id);
+  }
+  saveFlow(flow: Flow): Flow {
+    const parsed = FlowSchema.parse(flow);
+    this.db
+      .prepare(
+        "INSERT INTO flows(id,run_id,data) VALUES (?,?,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data",
+      )
+      .run(parsed.id, parsed.runId, JSON.stringify(parsed));
+    return parsed;
+  }
+  flow(id: string): Flow | undefined {
+    const row = this.db.prepare("SELECT data FROM flows WHERE id=?").get(id) as
+      | { data: string }
+      | undefined;
+    return row ? FlowSchema.parse(JSON.parse(row.data)) : undefined;
+  }
+  flows(runId: string): Flow[] {
+    return (
+      this.db
+        .prepare("SELECT data FROM flows WHERE run_id=? ORDER BY rowid DESC")
+        .all(runId) as { data: string }[]
+    ).map((row) => FlowSchema.parse(JSON.parse(row.data)));
+  }
+  saveEvidence(evidence: Evidence): Evidence {
+    const parsed = EvidenceSchema.parse(evidence);
+    this.db
+      .prepare(
+        "INSERT INTO evidence(id,run_id,verification_run_id,data) VALUES (?,?,?,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data,verification_run_id=excluded.verification_run_id",
+      )
+      .run(
+        parsed.id,
+        parsed.runId,
+        parsed.verificationRunId ?? null,
+        JSON.stringify(parsed),
+      );
+    return parsed;
+  }
+  evidence(id: string): Evidence | undefined {
+    const row = this.db
+      .prepare("SELECT data FROM evidence WHERE id=?")
+      .get(id) as { data: string } | undefined;
+    return row ? EvidenceSchema.parse(JSON.parse(row.data)) : undefined;
+  }
+  evidenceForVerificationRun(verificationRunId: string): Evidence[] {
+    return (
+      this.db
+        .prepare(
+          "SELECT data FROM evidence WHERE verification_run_id=? ORDER BY rowid ASC",
+        )
+        .all(verificationRunId) as { data: string }[]
+    ).map((row) => EvidenceSchema.parse(JSON.parse(row.data)));
+  }
+  saveVerificationRun(run: VerificationRun): VerificationRun {
+    const parsed = VerificationRunSchema.parse(run);
+    this.db
+      .prepare(
+        "INSERT INTO verification_runs(id,capability_id,data) VALUES (?,?,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data",
+      )
+      .run(parsed.id, parsed.capabilityId, JSON.stringify(parsed));
+    return parsed;
+  }
+  verificationRun(id: string): VerificationRun | undefined {
+    const row = this.db
+      .prepare("SELECT data FROM verification_runs WHERE id=?")
+      .get(id) as { data: string } | undefined;
+    return row ? VerificationRunSchema.parse(JSON.parse(row.data)) : undefined;
+  }
+  verificationRuns(capabilityId: string): VerificationRun[] {
+    return (
+      this.db
+        .prepare(
+          "SELECT data FROM verification_runs WHERE capability_id=? ORDER BY rowid DESC",
+        )
+        .all(capabilityId) as { data: string }[]
+    ).map((row) => VerificationRunSchema.parse(JSON.parse(row.data)));
+  }
+  // AI Browse (apps/server/src/browse-session.ts). Unlike capabilities/flows,
+  // browse_sessions carries owner_id directly rather than relying on a prior
+  // store.project(id, ownerId) ownership check at the call site — a browse
+  // session is reached by session id alone on the events/chat/close routes,
+  // with no natural "look up the project first" hop the way capability
+  // routes have.
+  createBrowseSession(session: BrowseSession): BrowseSession {
+    const parsed = BrowseSessionSchema.parse(session);
+    this.db
+      .prepare(
+        "INSERT INTO browse_sessions(id,project_id,owner_id,data) VALUES (?,?,?,?)",
+      )
+      .run(parsed.id, parsed.projectId, parsed.ownerId, JSON.stringify(parsed));
+    return parsed;
+  }
+  browseSession(id: string, ownerId: string): BrowseSession | undefined {
+    const row = this.db
+      .prepare("SELECT data FROM browse_sessions WHERE id=? AND owner_id=?")
+      .get(id, ownerId) as { data: string } | undefined;
+    return row ? BrowseSessionSchema.parse(JSON.parse(row.data)) : undefined;
+  }
+  browseSessions(projectId: string, ownerId: string): BrowseSession[] {
+    return (
+      this.db
+        .prepare(
+          "SELECT data FROM browse_sessions WHERE project_id=? AND owner_id=? ORDER BY rowid DESC",
+        )
+        .all(projectId, ownerId) as { data: string }[]
+    ).map((row) => BrowseSessionSchema.parse(JSON.parse(row.data)));
+  }
+  updateBrowseSession(
+    id: string,
+    patch: Partial<BrowseSession>,
+    ownerId: string,
+  ): BrowseSession {
+    const existing = this.browseSession(id, ownerId);
+    if (!existing) throw new Error("Browse session not found");
+    const parsed = BrowseSessionSchema.parse({ ...existing, ...patch });
+    this.db
+      .prepare("UPDATE browse_sessions SET data=? WHERE id=?")
+      .run(JSON.stringify(parsed), id);
+    return parsed;
+  }
+  // Call once at server startup. A browse session's actual Browser/Page
+  // handle lives only in apps/server/src/browse-session.ts's in-memory
+  // `live` map — it never survives a process restart. Any session this
+  // table still calls "live"/"connecting" from a previous process is
+  // therefore necessarily stale (that process died or was restarted while
+  // it was open), and left alone it fools the dashboard's session-recovery
+  // effect into reattaching to a dead session instead of starting a fresh
+  // one — skipping the connect/launch flow (and the base-URL auto-navigate
+  // that only happens inside openBrowseSession) entirely.
+  closeStaleBrowseSessions(): void {
+    const rows = this.db
+      .prepare("SELECT id, data FROM browse_sessions")
+      .all() as { id: string; data: string }[];
+    const closedAt = new Date().toISOString();
+    for (const row of rows) {
+      const session = BrowseSessionSchema.parse(JSON.parse(row.data));
+      if (session.status !== "live" && session.status !== "connecting")
+        continue;
+      const patched = BrowseSessionSchema.parse({
+        ...session,
+        status: "closed",
+        closedAt,
+      });
+      this.db
+        .prepare("UPDATE browse_sessions SET data=? WHERE id=?")
+        .run(JSON.stringify(patched), row.id);
+    }
+  }
+  appendBrowseEvent(event: BrowseEvent): BrowseEvent {
+    const parsed = BrowseEventSchema.parse(event);
+    this.db
+      .prepare(
+        "INSERT INTO browse_events(id,session_id,sequence,data) VALUES (?,?,?,?) ON CONFLICT(session_id,sequence) DO NOTHING",
+      )
+      .run(
+        parsed.id,
+        parsed.sessionId,
+        parsed.sequence,
+        JSON.stringify(parsed),
+      );
+    return parsed;
+  }
+  browseEventsSince(sessionId: string, afterSequence: number): BrowseEvent[] {
+    return (
+      this.db
+        .prepare(
+          "SELECT data FROM browse_events WHERE session_id=? AND sequence>? ORDER BY sequence ASC",
+        )
+        .all(sessionId, afterSequence) as { data: string }[]
+    ).map((row) => BrowseEventSchema.parse(JSON.parse(row.data)));
+  }
+  // Login session capture (apps/server/src/auth-capture.ts) — a human logs
+  // into the target app in a fresh, isolated, visible browser window; the
+  // resulting storageState() is saved to disk and its path offered as a
+  // discovery run's ScanConfig.authStatePath. Same owner_id-on-row shape as
+  // browse_sessions, for the same reason (reached by capture id alone).
+  createAuthCapture(capture: AuthCapture): AuthCapture {
+    const parsed = AuthCaptureSchema.parse(capture);
+    this.db
+      .prepare(
+        "INSERT INTO auth_captures(id,project_id,owner_id,data) VALUES (?,?,?,?)",
+      )
+      .run(parsed.id, parsed.projectId, parsed.ownerId, JSON.stringify(parsed));
+    return parsed;
+  }
+  authCapture(id: string, ownerId: string): AuthCapture | undefined {
+    const row = this.db
+      .prepare("SELECT data FROM auth_captures WHERE id=? AND owner_id=?")
+      .get(id, ownerId) as { data: string } | undefined;
+    return row ? AuthCaptureSchema.parse(JSON.parse(row.data)) : undefined;
+  }
+  authCaptures(projectId: string, ownerId: string): AuthCapture[] {
+    return (
+      this.db
+        .prepare(
+          "SELECT data FROM auth_captures WHERE project_id=? AND owner_id=? ORDER BY rowid DESC",
+        )
+        .all(projectId, ownerId) as { data: string }[]
+    ).map((row) => AuthCaptureSchema.parse(JSON.parse(row.data)));
+  }
+  updateAuthCapture(
+    id: string,
+    patch: Partial<AuthCapture>,
+    ownerId: string,
+  ): AuthCapture {
+    const existing = this.authCapture(id, ownerId);
+    if (!existing) throw new Error("Auth capture not found");
+    const parsed = AuthCaptureSchema.parse({ ...existing, ...patch });
+    this.db
+      .prepare("UPDATE auth_captures SET data=? WHERE id=?")
+      .run(JSON.stringify(parsed), id);
+    return parsed;
+  }
+  deleteAuthCapture(id: string, ownerId: string): void {
+    this.db
+      .prepare("DELETE FROM auth_captures WHERE id=? AND owner_id=?")
+      .run(id, ownerId);
+  }
+  // Call once at server startup — mirrors closeStaleBrowseSessions(): an
+  // auth capture's live Browser/Page handle lives only in
+  // apps/server/src/auth-capture.ts's in-memory map and never survives a
+  // process restart, so any row still "open" from a previous process is
+  // necessarily stale.
+  closeStaleAuthCaptures(): void {
+    const rows = this.db
+      .prepare("SELECT id, data FROM auth_captures")
+      .all() as {
+      id: string;
+      data: string;
+    }[];
+    for (const row of rows) {
+      const capture = AuthCaptureSchema.parse(JSON.parse(row.data));
+      if (capture.status !== "open") continue;
+      const patched = AuthCaptureSchema.parse({
+        ...capture,
+        status: "cancelled",
+      });
+      this.db
+        .prepare("UPDATE auth_captures SET data=? WHERE id=?")
+        .run(JSON.stringify(patched), row.id);
+    }
+  }
+  // Automation: Workflow tab. See apps/server/src/automation-workflows.ts.
+  createAutomationWorkflow(workflow: AutomationWorkflow): AutomationWorkflow {
+    const parsed = AutomationWorkflowSchema.parse(workflow);
+    this.db
+      .prepare(
+        "INSERT INTO automation_workflows(id,project_id,owner_id,data) VALUES (?,?,?,?)",
+      )
+      .run(parsed.id, parsed.projectId, parsed.ownerId, JSON.stringify(parsed));
+    return parsed;
+  }
+  automationWorkflow(
+    id: string,
+    ownerId: string,
+  ): AutomationWorkflow | undefined {
+    const row = this.db
+      .prepare(
+        "SELECT data FROM automation_workflows WHERE id=? AND owner_id=?",
+      )
+      .get(id, ownerId) as { data: string } | undefined;
+    return row
+      ? AutomationWorkflowSchema.parse(JSON.parse(row.data))
+      : undefined;
+  }
+  automationWorkflows(
+    projectId: string,
+    ownerId: string,
+  ): AutomationWorkflow[] {
+    return (
+      this.db
+        .prepare(
+          "SELECT data FROM automation_workflows WHERE project_id=? AND owner_id=? ORDER BY rowid DESC",
+        )
+        .all(projectId, ownerId) as { data: string }[]
+    ).map((row) => AutomationWorkflowSchema.parse(JSON.parse(row.data)));
+  }
+  updateAutomationWorkflow(
+    id: string,
+    patch: Partial<AutomationWorkflow>,
+    ownerId: string,
+  ): AutomationWorkflow {
+    const existing = this.automationWorkflow(id, ownerId);
+    if (!existing) throw new Error("Workflow not found");
+    const parsed = AutomationWorkflowSchema.parse({ ...existing, ...patch });
+    this.db
+      .prepare("UPDATE automation_workflows SET data=? WHERE id=?")
+      .run(JSON.stringify(parsed), id);
+    return parsed;
+  }
+  deleteAutomationWorkflow(id: string, ownerId: string): void {
+    this.db
+      .prepare("DELETE FROM automation_workflows WHERE id=? AND owner_id=?")
+      .run(id, ownerId);
+    this.db.prepare("DELETE FROM workflow_runs WHERE workflow_id=?").run(id);
+  }
+  createWorkflowRun(run: WorkflowRun): WorkflowRun {
+    const parsed = WorkflowRunSchema.parse(run);
+    this.db
+      .prepare(
+        "INSERT INTO workflow_runs(id,workflow_id,owner_id,data) VALUES (?,?,?,?)",
+      )
+      .run(
+        parsed.id,
+        parsed.workflowId,
+        parsed.ownerId,
+        JSON.stringify(parsed),
+      );
+    return parsed;
+  }
+  workflowRun(id: string, ownerId: string): WorkflowRun | undefined {
+    const row = this.db
+      .prepare("SELECT data FROM workflow_runs WHERE id=? AND owner_id=?")
+      .get(id, ownerId) as { data: string } | undefined;
+    return row ? WorkflowRunSchema.parse(JSON.parse(row.data)) : undefined;
+  }
+  workflowRuns(workflowId: string, ownerId: string): WorkflowRun[] {
+    return (
+      this.db
+        .prepare(
+          "SELECT data FROM workflow_runs WHERE workflow_id=? AND owner_id=? ORDER BY rowid DESC",
+        )
+        .all(workflowId, ownerId) as { data: string }[]
+    ).map((row) => WorkflowRunSchema.parse(JSON.parse(row.data)));
+  }
+  updateWorkflowRun(
+    id: string,
+    patch: Partial<WorkflowRun>,
+    ownerId: string,
+  ): WorkflowRun {
+    const existing = this.workflowRun(id, ownerId);
+    if (!existing) throw new Error("Workflow run not found");
+    const parsed = WorkflowRunSchema.parse({ ...existing, ...patch });
+    this.db
+      .prepare("UPDATE workflow_runs SET data=? WHERE id=?")
+      .run(JSON.stringify(parsed), id);
+    return parsed;
+  }
+  // Automation: Framework tab. See apps/server/src/automation-framework.ts.
+  // One FrameworkProject per project (get-or-create) — framework_projects
+  // enforces that with a UNIQUE(project_id) column.
+  createFrameworkProject(project: FrameworkProject): FrameworkProject {
+    const parsed = FrameworkProjectSchema.parse(project);
+    this.db
+      .prepare(
+        "INSERT INTO framework_projects(id,project_id,owner_id,data) VALUES (?,?,?,?)",
+      )
+      .run(parsed.id, parsed.projectId, parsed.ownerId, JSON.stringify(parsed));
+    return parsed;
+  }
+  frameworkProject(
+    projectId: string,
+    ownerId: string,
+  ): FrameworkProject | undefined {
+    const row = this.db
+      .prepare(
+        "SELECT data FROM framework_projects WHERE project_id=? AND owner_id=?",
+      )
+      .get(projectId, ownerId) as { data: string } | undefined;
+    return row ? FrameworkProjectSchema.parse(JSON.parse(row.data)) : undefined;
+  }
+  frameworkProjectById(
+    id: string,
+    ownerId: string,
+  ): FrameworkProject | undefined {
+    const row = this.db
+      .prepare("SELECT data FROM framework_projects WHERE id=? AND owner_id=?")
+      .get(id, ownerId) as { data: string } | undefined;
+    return row ? FrameworkProjectSchema.parse(JSON.parse(row.data)) : undefined;
+  }
+  updateFrameworkProject(
+    id: string,
+    patch: Partial<FrameworkProject>,
+    ownerId: string,
+  ): FrameworkProject {
+    const existing = this.frameworkProjectById(id, ownerId);
+    if (!existing) throw new Error("Framework project not found");
+    const parsed = FrameworkProjectSchema.parse({ ...existing, ...patch });
+    this.db
+      .prepare("UPDATE framework_projects SET data=? WHERE id=?")
+      .run(JSON.stringify(parsed), id);
+    return parsed;
+  }
+  // The GitHub PAT a FrameworkProject connects with — kept out of the
+  // framework_projects.data blob entirely so every route that returns a
+  // FrameworkProject to the client is safe by construction.
+  setFrameworkGithubToken(frameworkProjectId: string, token: string): void {
+    this.db
+      .prepare(
+        "INSERT INTO framework_github_tokens(framework_project_id,token) VALUES (?,?) ON CONFLICT(framework_project_id) DO UPDATE SET token=excluded.token",
+      )
+      .run(frameworkProjectId, token);
+  }
+  frameworkGithubToken(frameworkProjectId: string): string | undefined {
+    const row = this.db
+      .prepare(
+        "SELECT token FROM framework_github_tokens WHERE framework_project_id=?",
+      )
+      .get(frameworkProjectId) as { token: string } | undefined;
+    return row?.token;
+  }
+  createTestRun(run: TestRun): TestRun {
+    const parsed = TestRunSchema.parse(run);
+    this.db
+      .prepare(
+        "INSERT INTO test_runs(id,framework_project_id,owner_id,data) VALUES (?,?,?,?)",
+      )
+      .run(
+        parsed.id,
+        parsed.frameworkProjectId,
+        parsed.ownerId,
+        JSON.stringify(parsed),
+      );
+    return parsed;
+  }
+  testRun(id: string, ownerId: string): TestRun | undefined {
+    const row = this.db
+      .prepare("SELECT data FROM test_runs WHERE id=? AND owner_id=?")
+      .get(id, ownerId) as { data: string } | undefined;
+    return row ? TestRunSchema.parse(JSON.parse(row.data)) : undefined;
+  }
+  testRuns(frameworkProjectId: string, ownerId: string): TestRun[] {
+    return (
+      this.db
+        .prepare(
+          "SELECT data FROM test_runs WHERE framework_project_id=? AND owner_id=? ORDER BY rowid DESC",
+        )
+        .all(frameworkProjectId, ownerId) as { data: string }[]
+    ).map((row) => TestRunSchema.parse(JSON.parse(row.data)));
+  }
+  updateTestRun(id: string, patch: Partial<TestRun>, ownerId: string): TestRun {
+    const existing = this.testRun(id, ownerId);
+    if (!existing) throw new Error("Test run not found");
+    const parsed = TestRunSchema.parse({ ...existing, ...patch });
+    this.db
+      .prepare("UPDATE test_runs SET data=? WHERE id=?")
+      .run(JSON.stringify(parsed), id);
+    return parsed;
+  }
+  createPackageOperation(op: PackageOperation): PackageOperation {
+    const parsed = PackageOperationSchema.parse(op);
+    this.db
+      .prepare(
+        "INSERT INTO package_operations(id,framework_project_id,owner_id,data) VALUES (?,?,?,?)",
+      )
+      .run(
+        parsed.id,
+        parsed.frameworkProjectId,
+        parsed.ownerId,
+        JSON.stringify(parsed),
+      );
+    return parsed;
+  }
+  packageOperation(id: string, ownerId: string): PackageOperation | undefined {
+    const row = this.db
+      .prepare("SELECT data FROM package_operations WHERE id=? AND owner_id=?")
+      .get(id, ownerId) as { data: string } | undefined;
+    return row ? PackageOperationSchema.parse(JSON.parse(row.data)) : undefined;
+  }
+  updatePackageOperation(
+    id: string,
+    patch: Partial<PackageOperation>,
+    ownerId: string,
+  ): PackageOperation {
+    const existing = this.packageOperation(id, ownerId);
+    if (!existing) throw new Error("Package operation not found");
+    const parsed = PackageOperationSchema.parse({ ...existing, ...patch });
+    this.db
+      .prepare("UPDATE package_operations SET data=? WHERE id=?")
+      .run(JSON.stringify(parsed), id);
+    return parsed;
   }
   close() {
     this.db.close();

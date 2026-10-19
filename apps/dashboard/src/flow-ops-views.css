@@ -628,3 +628,155 @@ button.flow-ops-task:hover {
     grid-auto-columns: minmax(220px, 82vw);
   }
 }
+
+/* --- Dark theme overrides (auto-generated contrast fix) --- */
+
+:root[data-theme="dark"] .flow-ops {
+  --ops-ink: var(--ink);
+  --ops-muted: var(--muted);
+  --ops-line: var(--line);
+  --ops-accent: var(--accent);
+}
+:root[data-theme="dark"] .flow-ops-counts span {
+  background: var(--surface);
+}
+:root[data-theme="dark"] .flow-ops-queue-note {
+  color: var(--ink);
+  background: var(--button-hover);
+}
+:root[data-theme="dark"] .flow-ops-queue-note svg {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flow-ops-empty {
+  background: var(--surface);
+  border-color: var(--line);
+}
+:root[data-theme="dark"] .flow-ops-empty svg {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flow-ops-worker-mark {
+  color: var(--ink);
+  background: var(--surface);
+  border-color: var(--line);
+}
+:root[data-theme="dark"] .flow-ops-lane-label small {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flow-ops-record {
+  background: var(--surface);
+  border-color: var(--line);
+}
+:root[data-theme="dark"] button.flow-ops-record:hover {
+  background: var(--surface);
+}
+:root[data-theme="dark"] .flow-ops-record time {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flow-ops-record strong {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flow-ops-record > span:last-child {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flow-ops-record-icon {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flow-ops-record-icon.action {
+  color: #8bd9bb;
+}
+:root[data-theme="dark"] .flow-ops-record-icon.event {
+  color: #edc679;
+}
+:root[data-theme="dark"] .flow-ops-record-icon.event.error {
+  color: #ffaaa1;
+}
+:root[data-theme="dark"] .flow-ops-record-icon.event.warn {
+  color: #edc679;
+}
+:root[data-theme="dark"] .flow-ops-assignment {
+  background: var(--surface);
+}
+:root[data-theme="dark"] .flow-ops-branch {
+  background: var(--surface);
+}
+:root[data-theme="dark"] .flow-ops-branch-path li::marker {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flow-ops-branch-path button {
+  background: var(--surface);
+  border-color: var(--line);
+}
+:root[data-theme="dark"] .flow-ops-branch-missing {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flow-ops-status {
+  color: var(--ink);
+  background: var(--surface);
+  border-color: var(--line);
+}
+:root[data-theme="dark"] .flow-ops-status.pending {
+  color: #edc679;
+  background: var(--surface);
+  border-color: var(--line);
+}
+:root[data-theme="dark"] .flow-ops-status.leased {
+  color: var(--ink);
+  background: var(--surface);
+  border-color: var(--line);
+}
+:root[data-theme="dark"] .flow-ops-status.done {
+  color: #8bd9bb;
+  background: var(--surface);
+  border-color: var(--line);
+}
+:root[data-theme="dark"] .flow-ops-status.failed {
+  color: #ffaaa1;
+  background: var(--surface);
+  border-color: var(--line);
+}
+:root[data-theme="dark"] .flow-ops-depth-column {
+  background: var(--surface);
+}
+:root[data-theme="dark"] .flow-ops-depth-column > header {
+  background: var(--button-hover);
+}
+:root[data-theme="dark"] .flow-ops-funnel-depth {
+  background: var(--surface);
+}
+:root[data-theme="dark"] .flow-ops-funnel-depth > header strong {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flow-ops-funnel-bar {
+  background: var(--button-hover);
+}
+:root[data-theme="dark"] .flow-ops-funnel-unknown {
+  color: #edc679;
+}
+:root[data-theme="dark"] .flow-ops-depth-icon {
+  color: var(--ink);
+  background: var(--surface);
+  border-color: var(--line);
+}
+:root[data-theme="dark"] .flow-ops-task {
+  background: var(--surface);
+  border-color: var(--line);
+}
+:root[data-theme="dark"] button.flow-ops-task:hover {
+  background: var(--surface);
+}
+:root[data-theme="dark"] .flow-ops-queue-position {
+  color: var(--ink);
+  background: var(--button-hover);
+}
+:root[data-theme="dark"] .flow-ops-priority {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flow-ops-task > strong {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flow-ops-task-url {
+  color: var(--ink);
+}
+:root[data-theme="dark"] .flow-ops-task-meta {
+  color: var(--ink);
+}

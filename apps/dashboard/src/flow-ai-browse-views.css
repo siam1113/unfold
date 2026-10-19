@@ -1,0 +1,406 @@
+.browse-backdrop {
+  position: fixed;
+  z-index: 1001;
+  inset: 0;
+  background: var(--canvas);
+  animation: agent-backdrop-enter 180ms ease both;
+}
+.browse-panel {
+  position: fixed;
+  inset: 0;
+  z-index: 1002;
+  width: 100vw;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  padding: 16px 20px 20px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  background: var(--canvas);
+  box-sizing: border-box;
+}
+.browse-panel .agent-screen-toolbar {
+  gap: 10px;
+}
+.browse-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+.browse-workbench {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  gap: 0;
+  margin-top: 16px;
+}
+.browse-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.browse-connect {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  text-align: center;
+  color: var(--muted);
+}
+.browse-connect strong {
+  font-size: 17px;
+  color: var(--ink, #25364d);
+}
+.browse-connect > p {
+  max-width: 420px;
+  font-size: 12px;
+}
+.browse-connect-options {
+  display: flex;
+  gap: 14px;
+  width: min(680px, 94vw);
+}
+.browse-connect-option {
+  flex: 1;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  text-align: left;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  cursor: pointer;
+}
+.browse-connect-option:hover:not(:disabled) {
+  border-color: #99a9c0;
+}
+.browse-connect-option:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.browse-connect-option strong {
+  display: block;
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+.browse-connect-option small {
+  font-size: 11px;
+  color: var(--muted);
+}
+.browse-connect-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(480px, 94vw);
+}
+.browse-connect-form code {
+  font-size: 11px;
+  background: #172638;
+  color: #dce9f3;
+  border-radius: 6px;
+  padding: 8px 10px;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+.browse-connect-form-row {
+  display: flex;
+  gap: 8px;
+}
+.browse-connect-form-row input {
+  flex: 1;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  font-size: 12px;
+}
+.browse-connect-error {
+  color: #bd4e4e;
+  font-size: 12px;
+  max-width: 420px;
+}
+.browse-connect-status {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.browse-addressbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+}
+.browse-addressbar input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  cursor: text;
+  font:
+    12px ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
+  color: var(--ink, #25364d);
+}
+.browse-addressbar button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+.browse-addressbar button:hover:not(:disabled) {
+  background: var(--canvas);
+  color: var(--ink, #25364d);
+}
+.browse-addressbar button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.browse-addressbar.is-navigating {
+  opacity: 0.85;
+}
+.browse-browser-viewport {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  background: #0f1317;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.browse-browser-viewport img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+.browse-status-line {
+  font-size: 11px;
+  color: var(--muted);
+  padding: 2px 2px 0;
+}
+.browse-composer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.browse-composer input {
+  flex: 1;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 13px;
+}
+.browse-mic-button {
+  flex: 0 0 auto;
+}
+.browse-mic-button.is-listening {
+  color: #2a7fb8;
+  background: color-mix(in srgb, #2a7fb8 14%, transparent);
+  animation: browse-mic-pulse 1.6s ease-in-out infinite;
+}
+.browse-mic-button.is-speaking {
+  color: #6a4fc0;
+  background: color-mix(in srgb, #6a4fc0 14%, transparent);
+}
+@keyframes browse-mic-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, #2a7fb8 35%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 5px color-mix(in srgb, #2a7fb8 0%, transparent);
+  }
+}
+.browse-voice-state {
+  flex: 0 0 auto;
+  font-size: 10px;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.browse-voice-state.is-listening {
+  color: #2a7fb8;
+}
+.browse-voice-state.is-speaking {
+  color: #6a4fc0;
+}
+.browse-drawer {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: stretch;
+}
+.browse-drawer-content {
+  width: 300px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-right: 8px;
+  padding: 10px 12px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.browse-drawer-content-head {
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 4px;
+}
+.browse-event-row {
+  font:
+    11px/1.4 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
+  color: var(--ink, #25364d);
+  overflow-wrap: anywhere;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 6px;
+}
+.browse-tool-row {
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+.browse-tool-row code {
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--ink, #25364d);
+}
+.browse-tool-row p {
+  margin: 3px 0 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+.browse-tool-activity-row {
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+.browse-tool-activity-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.browse-tool-activity-head code {
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--ink, #25364d);
+}
+.browse-tool-activity-source {
+  font:
+    10px/1.4 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
+  font-weight: 650;
+  color: var(--muted);
+}
+.browse-tool-activity-source.is-webmcp {
+  color: #6a4fc0;
+}
+.browse-tool-activity-source.is-browser {
+  color: #2a7fb8;
+}
+.browse-tool-activity-status {
+  font-size: 10px;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 1px 7px;
+  border-radius: 999px;
+  color: var(--muted);
+  background: var(--canvas);
+}
+.browse-tool-activity-status.is-running {
+  color: #a5780f;
+  background: #fbe8c2;
+}
+.browse-tool-activity-status.is-done {
+  color: #1f8a5a;
+  background: #cdeede;
+}
+.browse-tool-activity-status.is-failed {
+  color: #bd4e4e;
+  background: #f6d7d7;
+}
+.browse-tool-activity-row pre {
+  margin: 4px 0 0;
+  font:
+    10px/1.4 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.browse-drawer-rail {
+  flex: 0 0 auto;
+  width: 40px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.browse-drawer-rail button {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+.browse-drawer-rail button.active,
+.browse-drawer-rail button:hover {
+  background: var(--canvas);
+  color: var(--ink, #25364d);
+}
+.browse-drawer-toggle {
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--line);
+  border-radius: 7px 7px 0 0;
+  padding-bottom: 10px;
+}
+
+/* --- Dark theme overrides (auto-generated contrast fix) --- */
+
+:root[data-theme="dark"] .browse-connect-error {
+  color: #ffaaa1;
+}

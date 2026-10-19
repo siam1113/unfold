@@ -152,7 +152,9 @@ cli
           const run = store.createRun(config, project.id);
           const running = coordinator
             .start(run.id)
-            .catch((error) => console.error("MCP discovery failed:", error.message))
+            .catch((error) =>
+              console.error("MCP discovery failed:", error.message),
+            )
             .finally(() => activeRuns.delete(run.id));
           activeRuns.set(run.id, running);
           return store.summary(run.id);

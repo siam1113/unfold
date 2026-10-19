@@ -10,15 +10,21 @@
 // apps/server/src/browse-session.ts's live/visible AI-Browse sessions — no
 // shared state, no "one session per project" conflict.
 import { randomUUID } from "node:crypto";
-import { existsSync } from "node:fs";
-import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
+import { mkdir, writeFile, chmod } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
+import {
+  chromium,
+  type Browser,
+  type BrowserContext,
+  type Page,
+} from "playwright";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import {
   ListToolsRequestSchema,
   CallToolRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { Store } from "../../storage/src/index.js";
+import { Store, artifactRoot } from "../../storage/src/index.js";
 import type {
   CapabilityCandidate,
   Flow,
@@ -27,9 +33,20 @@ import {
   replayCapability,
   type RequiredFlowResolution,
 } from "../../capability-runtime/src/replay.js";
+import { runSetupSteps } from "../../worker/src/workflow-runner.js";
 import { toModelContextTool } from "../../adapters/webmcp/src/index.js";
 
-interface AppMcpSession {
+// Always-available tool name (not a mined Capability/Flow at all — WorkflowStep's
+// navigate/waitFor steps have no equivalent in FlowStep's click/hover/fill/
+// select-only vocabulary, so a login recipe can't be represented as a
+// replayCapability()-executed Flow the way a discovered capability is; this
+// runs via runSetupSteps instead, the same engine discovery's own setup
+// steps already use). Offered whenever the project has a saved login
+// recipe — see the ListToolsRequestSchema handler below.
+const AUTHENTICATE_TOOL = "Authenticate";
+
+/** Exported for tests (tests/app-mcp-authenticate.test.ts), which builds one directly rather than going through handleProjectAppMcpPost's real HTTP session bootstrap. */
+export interface AppMcpSession {
   projectId: string;
   ownerId: string;
   transport: StreamableHTTPServerTransport;
@@ -67,43 +84,55 @@ const idleSweep = setInterval(() => {
 // listener keeping the event loop open regardless).
 idleSweep.unref();
 
-/**
- * The discovery run's saved login session (same field `VerificationRunner`
- * reads — `packages/verification/src/runner.ts`'s private
- * `resolveAuthStatePath`), so a capability mined from an authenticated
- * crawl replays authenticated here too. Resolved once per session, from
- * whichever capability's flow is called first — a session's browser
- * context has exactly one cookie jar, so later calls against a
- * differently-authenticated flow in the same session fall back to
- * whatever context already exists.
- */
-function resolveAuthStatePath(
-  store: Store,
-  flow: Flow,
-  ownerId?: string,
-): string | undefined {
-  try {
-    const path = store.run(flow.runId, ownerId).config.authStatePath;
-    return path && existsSync(path) ? path : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
+// Resolved once per session, from whichever tool call happens first — a
+// session's browser context has exactly one cookie jar, so later calls
+// against a differently-authenticated flow (or a call to "Authenticate",
+// below) in the same session reuse whatever context already exists rather
+// than opening a second one.
 async function ensureSessionPage(
-  store: Store,
   session: AppMcpSession,
   headed: boolean,
-  flow: Flow,
+  authStatePath: string | undefined,
 ): Promise<Page> {
   if (session.page) return session.page;
   session.browser = await chromium.launch({ headless: !headed });
-  const authStatePath = resolveAuthStatePath(store, flow, session.ownerId);
   session.context = await session.browser.newContext(
     authStatePath ? { storageState: authStatePath } : undefined,
   );
   session.page = await session.context.newPage();
   return session.page;
+}
+
+/**
+ * The "Authenticate" tool's definition, or `undefined` if this project has
+ * no saved login recipe yet (scanConfig.setupSteps — see
+ * apps/dashboard/src/flow-auth-capture-views.tsx's "Save as project login
+ * recipe"). Exported so apps/server/src/index.ts's `/appmcp-tools` route
+ * (the dashboard AppMCP panel's "Tools" list) shows exactly the same tool
+ * a real MCP client's tools/list would see — one definition, not two
+ * independently-maintained copies that can drift.
+ */
+export function authenticateToolDefinition(
+  store: Store,
+  projectId: string,
+  ownerId?: string,
+):
+  | {
+      name: string;
+      description: string;
+      inputSchema: { type: "object"; properties: Record<string, never> };
+      annotations: { readOnlyHint: boolean; destructiveHint: boolean };
+    }
+  | undefined {
+  if (!store.project(projectId, ownerId).scanConfig.setupSteps.length)
+    return undefined;
+  return {
+    name: AUTHENTICATE_TOOL,
+    description:
+      "Log into the target application using this project's saved login steps. Call this first if other tool calls are failing because the page isn't signed in (e.g. landing on a login/home page, or a target element not being found).",
+    inputSchema: { type: "object", properties: {} },
+    annotations: { readOnlyHint: false, destructiveHint: false },
+  };
 }
 
 /** Deliberate small duplicate of apps/server/src/capabilities.ts's `publishedCandidatesForProject` — packages/mcp must not import from apps/server (packages depend on packages, never the reverse); packages/mcp/src/server.ts already takes Store+Project directly, so this follows that same precedent instead of inventing a new layering. */
@@ -132,7 +161,8 @@ function suggestionFor(error: unknown): string {
   return "The flow failed; inspect the page state above and consider retrying or using a different input.";
 }
 
-function buildAppMcpServer(
+/** Exported for tests (tests/app-mcp-authenticate.test.ts) — connects directly via the MCP SDK's InMemoryTransport, same proven pattern packages/mcp/src/mining-tools.ts's connectMiningMcpClient uses, rather than needing a real HTTP request/response pair. */
+export function buildAppMcpServer(
   store: Store,
   projectId: string,
   session: AppMcpSession,
@@ -151,29 +181,102 @@ function buildAppMcpServer(
     );
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: publishedCandidates(store, projectId).map(({ capability }) => {
-      const tool = toModelContextTool(capability);
-      return {
-        name: tool.name,
-        description: tool.description,
-        inputSchema: (tool.inputSchema as { type: "object" } | undefined) ?? {
-          type: "object" as const,
-          properties: {},
-        },
-        // MCP's own annotation vocabulary has no exact equivalent of
-        // WebMCP's `consequentialHint` — `destructiveHint` is the closest
-        // (both flag "this action has side effects beyond reading").
-        annotations: {
-          readOnlyHint: tool.annotations.readOnlyHint,
-          destructiveHint: tool.annotations.consequentialHint,
-        },
-      };
-    }),
+    tools: [
+      // Only offered once a project has a saved login recipe at all —
+      // always available, no verify/approve/publish gate — it isn't a
+      // discovered capability, it's infrastructure for using the others.
+      ...(() => {
+        const tool = authenticateToolDefinition(
+          store,
+          projectId,
+          session.ownerId,
+        );
+        return tool ? [tool] : [];
+      })(),
+      ...publishedCandidates(store, projectId).map(({ capability }) => {
+        const tool = toModelContextTool(capability);
+        return {
+          name: tool.name,
+          description: tool.description,
+          inputSchema: (tool.inputSchema as { type: "object" } | undefined) ?? {
+            type: "object" as const,
+            properties: {},
+          },
+          // MCP's own annotation vocabulary has no exact equivalent of
+          // WebMCP's `consequentialHint` — `destructiveHint` is the closest
+          // (both flag "this action has side effects beyond reading").
+          annotations: {
+            readOnlyHint: tool.annotations.readOnlyHint,
+            destructiveHint: tool.annotations.consequentialHint,
+          },
+        };
+      }),
+    ],
   }));
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     session.lastActivity = Date.now();
     const { name, arguments: args } = request.params;
+
+    if (name === AUTHENTICATE_TOOL) {
+      const project = store.project(projectId, session.ownerId);
+      const steps = project.scanConfig.setupSteps;
+      if (!steps.length)
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: "This project has no saved login steps yet — capture a login session and save it as the project's recipe first.",
+            },
+          ],
+          isError: true,
+        };
+      try {
+        // Starts fresh rather than seeding from whatever (possibly stale)
+        // session already exists — the whole point of calling this is to
+        // establish a known-good one. Harmless if the session's context was
+        // already created by an earlier capability call in this same
+        // connection: ensureSessionPage only creates it once, so this just
+        // runs the recipe on top of whatever cookies that context already
+        // had, same as a human re-logging-in on an already-open tab.
+        const page = await ensureSessionPage(session, headed, undefined);
+        await runSetupSteps(
+          session.context!,
+          page,
+          project.baseUrl,
+          steps,
+          undefined,
+          store.projectAuthSecrets(projectId),
+        );
+        // Persisted as the project's canonical session too, so a later
+        // capability call in a DIFFERENT connection — or a verification
+        // run — benefits from this login without needing its own
+        // Authenticate call.
+        const state = await session.context!.storageState();
+        const path = resolve(
+          artifactRoot(),
+          "projects",
+          projectId,
+          "auth-state.json",
+        );
+        await mkdir(dirname(path), { recursive: true, mode: 0o700 });
+        await writeFile(path, JSON.stringify(state));
+        await chmod(path, 0o600);
+        store.updateProjectAuthStatePath(projectId, path, session.ownerId);
+        return { content: [{ type: "text" as const, text: "Signed in." }] };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `Authentication failed: ${error instanceof Error ? error.message : String(error)}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    }
+
     const found = publishedCandidates(store, projectId).find(
       ({ capability }) => toModelContextTool(capability).name === name,
     );
@@ -183,10 +286,18 @@ function buildAppMcpServer(
         isError: true,
       };
     let lastStep:
-      | { index: number; action: Flow["steps"][number]["action"]; requiresUrl?: string }
+      | {
+          index: number;
+          action: Flow["steps"][number]["action"];
+          requiresUrl?: string;
+        }
       | undefined;
     try {
-      const page = await ensureSessionPage(store, session, headed, found.flow);
+      const page = await ensureSessionPage(
+        session,
+        headed,
+        store.resolveFlowAuthStatePath(found.flow.runId, session.ownerId),
+      );
       const result = await replayCapability(
         page,
         found.capability,
@@ -209,7 +320,10 @@ function buildAppMcpServer(
         error: error instanceof Error ? error.message : String(error),
         step: lastStep,
         page: page
-          ? { url: page.url(), title: await page.title().catch(() => undefined) }
+          ? {
+              url: page.url(),
+              title: await page.title().catch(() => undefined),
+            }
           : undefined,
         suggestion: suggestionFor(error),
       };
@@ -274,7 +388,10 @@ export async function handleProjectAppMcpPost(
   }
 }
 
-export async function handleProjectAppMcpGet(req: any, res: any): Promise<void> {
+export async function handleProjectAppMcpGet(
+  req: any,
+  res: any,
+): Promise<void> {
   const existing = sessionFor(req);
   if (!existing) {
     res.status(400).json({ error: "Unknown or missing MCP session." });

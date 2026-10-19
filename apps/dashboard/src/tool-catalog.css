@@ -1,0 +1,158 @@
+.tool-catalog {
+  --tc-ink: #25364d;
+  --tc-muted: #73839a;
+  --tc-border: #e4eaf2;
+  --tc-subtle: #f7f9fc;
+  --tc-good: #23805e;
+  --tc-good-bg: #eef7f2;
+  --tc-warn: #a66b08;
+  --tc-warn-bg: #fff7e7;
+  --tc-bad: #bd4e4e;
+  --tc-bad-bg: #fff0f0;
+  margin-top: 14px;
+}
+.tool-catalog-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  border: 1px solid var(--tc-border);
+  border-radius: 8px;
+  background: var(--tc-subtle);
+  color: var(--tc-muted);
+}
+.tool-catalog-search input {
+  flex: 1;
+  border: 0;
+  background: none;
+  outline: none;
+  color: var(--tc-ink);
+  font-size: 12px;
+}
+.tool-catalog-list {
+  display: flex;
+  flex-direction: column;
+  max-height: 320px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+  border: 1px solid var(--tc-border);
+  border-radius: 8px;
+}
+.tool-catalog-list li + li {
+  border-top: 1px solid var(--tc-border);
+}
+.tool-catalog-row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  gap: 9px;
+  padding: 9px 11px;
+  border: 0;
+  background: none;
+  color: var(--tc-muted);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.tool-catalog-list li.open .tool-catalog-row,
+.tool-catalog-row:hover {
+  background: var(--tc-subtle);
+}
+.tool-catalog-row code {
+  flex: 0 0 auto;
+  color: var(--tc-ink);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.tool-catalog-risk {
+  flex: 0 0 auto;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--tc-subtle);
+  color: var(--tc-muted);
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.tool-catalog-risk.is-good {
+  background: var(--tc-good-bg);
+  color: var(--tc-good);
+}
+.tool-catalog-risk.is-warn {
+  background: var(--tc-warn-bg);
+  color: var(--tc-warn);
+}
+.tool-catalog-risk.is-bad {
+  background: var(--tc-bad-bg);
+  color: var(--tc-bad);
+}
+.tool-catalog-desc {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--tc-muted);
+  font-size: 11.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tool-catalog-detail {
+  display: grid;
+  gap: 10px;
+  padding: 4px 14px 14px 33px;
+}
+.tool-catalog-detail-label {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--tc-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+.tool-catalog-detail p {
+  margin: 0;
+  color: var(--tc-ink);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.tool-catalog-detail .tool-catalog-muted {
+  color: var(--tc-muted);
+}
+.tool-catalog-detail pre {
+  margin: 0;
+  padding: 10px 12px;
+  overflow: auto;
+  border-radius: 7px;
+  background: #192d37;
+  color: #deece9;
+  font:
+    11px/1.55 "IBM Plex Mono",
+    ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.tool-catalog-empty {
+  padding: 14px 2px;
+  color: var(--tc-muted);
+  font-size: 12px;
+}
+
+:root[data-theme="dark"] .tool-catalog {
+  --tc-ink: var(--ink);
+  --tc-muted: var(--muted);
+  --tc-border: var(--line);
+  --tc-subtle: var(--button-hover);
+  --tc-good: #8bd9bb;
+  --tc-good-bg: color-mix(in srgb, #8bd9bb 18%, transparent);
+  --tc-warn: #e7c47a;
+  --tc-warn-bg: color-mix(in srgb, #e7c47a 18%, transparent);
+  --tc-bad: #e79a9a;
+  --tc-bad-bg: color-mix(in srgb, #e79a9a 18%, transparent);
+}

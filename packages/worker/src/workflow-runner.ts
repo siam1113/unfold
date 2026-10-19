@@ -17,19 +17,32 @@ import type {
   WorkflowStep,
   WorkflowStepResult,
 } from "../../shared/src/index.js";
-import { stabilize, trackPageRequests } from "./observe.js";
+import { settleAfterAction, stabilize, trackPageRequests } from "./observe.js";
 
 /** Resolves a step's URL against the project's base URL; absolute URLs pass through unchanged. */
 function resolveUrl(url: string, baseUrl: string): string {
   return new URL(url, baseUrl).toString();
 }
 
-/** Executes one step's action against the live page/context. Throws on failure; callers decide what that means for the run. */
+/**
+ * Executes one step's action against the live page/context. Throws on
+ * failure; callers decide what that means for the run.
+ *
+ * `secrets`, keyed by the step's own index in whatever array it came from,
+ * supplies the real value for a `fill` step whose `secret` flag is set
+ * (its persisted `value` is always `""` — see WorkflowStepSchema) — in
+ * memory only, for this one execution, never read from or written to disk.
+ * A missing entry for a secret step fills an empty string rather than
+ * throwing, so a caller that doesn't need secret support (the Automation
+ * tab's workflows, which never set `secret`) is unaffected.
+ */
 export async function executeStep(
   page: Page,
   context: BrowserContext,
   baseUrl: string,
   step: WorkflowStep,
+  secrets?: Record<number, string>,
+  stepIndex?: number,
 ): Promise<void> {
   switch (step.type) {
     case "navigate":
@@ -37,9 +50,13 @@ export async function executeStep(
       return;
     case "click":
       await page.locator(step.selector).click();
+      await settleAfterAction(page);
       return;
     case "fill":
-      await page.locator(step.selector).fill(step.value);
+      await page
+        .locator(step.selector)
+        .fill(step.secret ? (secrets?.[stepIndex ?? -1] ?? "") : step.value);
+      await settleAfterAction(page);
       return;
     case "waitFor":
       if (step.text)
@@ -81,6 +98,9 @@ export async function executeStep(
  * opening/closing that context and exporting its storageState() afterward —
  * this function only executes the steps). Throws on the first failing step;
  * the caller decides what that means for the run.
+ *
+ * `secrets` (step index -> real value) supplies any `secret: true` fill
+ * step's actual value for this one run — see `executeStep`'s doc comment.
  */
 export async function runSetupSteps(
   context: BrowserContext,
@@ -88,6 +108,7 @@ export async function runSetupSteps(
   baseUrl: string,
   steps: WorkflowStep[],
   onEvent?: (message: string) => void,
+  secrets?: Record<number, string>,
 ): Promise<void> {
   for (let index = 0; index < steps.length; index++) {
     const step = steps[index];
@@ -97,7 +118,7 @@ export async function runSetupSteps(
       }`,
     );
     try {
-      await executeStep(page, context, baseUrl, step);
+      await executeStep(page, context, baseUrl, step, secrets, index);
     } catch (error) {
       throw new Error(
         `Setup step ${index + 1}/${steps.length} (${step.type}) failed: ${

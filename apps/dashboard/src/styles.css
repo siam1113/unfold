@@ -9058,8 +9058,8 @@ textarea:focus-visible {
   background: #17263880;
 }
 .mcp-setup-dialog {
-  width: min(100%, 650px);
-  max-height: min(90vh, 820px);
+  width: min(100%, 860px);
+  max-height: min(92vh, 960px);
   overflow-y: auto;
   padding: 26px;
   border: 1px solid #dce5e7;
@@ -9154,6 +9154,15 @@ textarea:focus-visible {
 .mcp-setup-capabilities svg {
   color: #258a72;
 }
+.mcp-setup-format-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.mcp-setup-format-row .field-label {
+  margin: 0;
+}
 .mcp-setup-clients {
   display: flex;
   gap: 5px;
@@ -9227,6 +9236,9 @@ textarea:focus-visible {
 .mcp-setup-auth p {
   font-size: 11px;
   line-height: 1.55;
+}
+.mcp-setup-auth p + p {
+  margin-top: 8px;
 }
 .mcp-setup-empty {
   display: grid;

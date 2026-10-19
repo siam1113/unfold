@@ -30,121 +30,27 @@ function registerTools(
   };
   const inDiscoveries = <T>(collect: (run: RunSummary) => T[]) =>
     discoveries().flatMap((run) => collect(run));
-  const registeredFlowTools = new Set<string>();
-  const registerObservedFlowTools = () => {
-    const names: string[] = [];
-    const latestRuns = discoveries().slice(0, 5);
-    const candidates = latestRuns.flatMap((run) => {
-      const calls = store.data(run.id).apiCalls;
-      const grouped = new Map<string, typeof calls>();
-      for (const call of calls) {
-        const flow = grouped.get(call.taskId) || [];
-        flow.push(call);
-        grouped.set(call.taskId, flow);
-      }
-      return [...grouped.entries()].map(([taskId, flow]) => ({
-        run,
-        taskId,
-        calls: flow.sort((a, b) => a.sequence - b.sequence),
-        observedAt: flow.at(-1)?.observedAt || "",
-      }));
-    });
-    candidates.sort((a, b) => b.observedAt.localeCompare(a.observedAt));
-    for (const candidate of candidates.slice(0, 75)) {
-      const first = candidate.calls[0];
-      const action = first?.actionId
-        ? store
-            .data(candidate.run.id)
-            .actions.find((item) => item.id === first.actionId)
-        : undefined;
-      const route = first?.fromStateId
-        ? store
-            .data(candidate.run.id)
-            .states.find((state) => state.id === first.fromStateId)?.url
-        : candidate.run.config.baseUrl;
-      const label =
-        action?.targetName ||
-        `route_${route ? new URL(route).pathname : "entry"}`;
-      const slug =
-        label
-          .toLowerCase()
-          .replace(/[^a-z0-9]+/g, "_")
-          .replace(/^_+|_+$/g, "")
-          .slice(0, 28) || "observed";
-      const toolName = `observed_flow_${slug}_${candidate.taskId.slice(-8)}`;
-      if (registeredFlowTools.has(toolName)) continue;
-      registeredFlowTools.add(toolName);
-      names.push(toolName);
-      server.registerTool(
-        toolName,
-        {
-          title: `Observed flow: ${label}`,
-          description: `Read the captured API request sequence for ${label} on ${route ? new URL(route).pathname : "the seed route"}. This tool returns evidence only and does not call the application's APIs.`,
-          inputSchema: {},
-          annotations: { readOnlyHint: true, openWorldHint: false },
-        },
-        async () => {
-          const run = data(candidate.run.id);
-          const flows = run.apiCalls
-            .filter((call) => call.taskId === candidate.taskId)
-            .sort((a, b) => a.sequence - b.sequence);
-          const flowAction = flows[0]?.actionId
-            ? run.actions.find((item) => item.id === flows[0].actionId)
-            : undefined;
-          const stateRef = (id?: string) => {
-            const state = run.states.find((item) => item.id === id);
-            if (!state) return undefined;
-            let url = state.url;
-            try {
-              const parsed = new URL(url);
-              parsed.search = [...parsed.searchParams.keys()]
-                .map((key) => `${encodeURIComponent(key)}=[redacted]`)
-                .join("&");
-              parsed.hash = "";
-              url = parsed.toString();
-            } catch {}
-            return { id: state.id, title: state.title, url };
-          };
-          return text({
-            discovery: {
-              id: run.run.id,
-              name: run.run.name,
-              status: run.run.status,
-            },
-            flow: {
-              taskId: candidate.taskId,
-              trigger: flowAction
-                ? {
-                    actionId: flowAction.id,
-                    action: flowAction.action,
-                    target: flowAction.targetName,
-                  }
-                : { type: "route_probe" },
-              from: stateRef(flows[0]?.fromStateId),
-              to: stateRef(flows[0]?.toStateId),
-              calls: flows,
-            },
-          });
-        },
-      );
-    }
-    return names;
+  // Redacts a state's query-string values and hash before it's handed back
+  // through an evidence tool — a captured URL can carry a session token or
+  // other sensitive value in its query string, which an MCP client has no
+  // business seeing just to identify which route a call happened on.
+  const redactedStateRef = (
+    run: RunData,
+    id?: string,
+  ): { id: string; title: string; url: string } | undefined => {
+    const state = run.states.find((item) => item.id === id);
+    if (!state) return undefined;
+    let url = state.url;
+    try {
+      const parsed = new URL(url);
+      parsed.search = [...parsed.searchParams.keys()]
+        .map((key) => `${encodeURIComponent(key)}=[redacted]`)
+        .join("&");
+      parsed.hash = "";
+      url = parsed.toString();
+    } catch {}
+    return { id: state.id, title: state.title, url };
   };
-  server.registerTool(
-    "refresh_flow_tools",
-    {
-      title: "Refresh observed flow tools",
-      description:
-        "Register dedicated read-only MCP tools for API flows captured in the latest project discoveries. Call after a discovery completes.",
-      inputSchema: {},
-      annotations: { readOnlyHint: true, openWorldHint: false },
-    },
-    async () =>
-      text({
-        newlyRegistered: registerObservedFlowTools(),
-        available: [...registeredFlowTools],
-      }),
-  );
   server.registerTool(
     "project_overview",
     {
@@ -390,7 +296,7 @@ function registerTools(
     {
       title: "Get observed API flow",
       description:
-        "Read an ordered API call sequence for a discovery, optionally narrowed to one interaction, route state, or probe task. Includes linked interaction and state evidence.",
+        "Read an ordered, evidence-only API call sequence for a discovery — the captured request sequence behind one observed interaction, route, or probe task. Narrow with actionId/stateId/taskId (find these via search_api_calls, get_interaction, or search_states); pass a single taskId to read exactly one flow. Omit all three to list every flow captured in the discovery. Does not call the application's APIs.",
       inputSchema: {
         discoveryId: z.string().uuid(),
         actionId: z.string().optional(),
@@ -446,8 +352,8 @@ function registerTools(
                   action: action.action,
                 }
               : { type: "route_probe" },
-            from: run.states.find((state) => state.id === first?.fromStateId),
-            to: run.states.find((state) => state.id === first?.toStateId),
+            from: redactedStateRef(run, first?.fromStateId),
+            to: redactedStateRef(run, first?.toStateId),
             calls: entries,
           };
         }),
@@ -571,7 +477,6 @@ function registerTools(
       });
     },
   );
-  registerObservedFlowTools();
   const resourceUri = `unfold://projects/${project.id}/context`;
   server.registerResource(
     "project-context",

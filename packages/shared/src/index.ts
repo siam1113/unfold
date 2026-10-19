@@ -29,6 +29,16 @@ export const WorkflowStepSchema = z.discriminatedUnion("type", [
     type: z.literal("fill"),
     selector: z.string(),
     value: z.string(),
+    /**
+     * Marks this step's real value as never persisted — recorded (Auto-
+     * recorded login steps, apps/server/src/auth-capture.ts) or manually
+     * flagged password fields always store `value: ""` here, regardless of
+     * what the user actually typed. The real value is supplied fresh,
+     * in-memory only, at each headless replay (`executeStep`'s `secrets`
+     * param, keyed by this step's index in the array) — never written to
+     * disk, the database, or returned to any client.
+     */
+    secret: z.boolean().optional(),
     description: z.string().max(300).optional(),
   }),
   z.object({
@@ -761,6 +771,14 @@ export function publicConfig(config: ScanConfig): ScanConfig {
       ...v,
       value: "[redacted]",
     })),
+    // A setup step can be (and, via auto-recorded login steps, often is) a
+    // login form's fill — redact every fill value here the same way
+    // formValues are redacted above, not just ones explicitly flagged
+    // `secret` (a manually-authored step never gets that flag, but can
+    // still hold a real typed password).
+    setupSteps: (config.setupSteps || []).map((step) =>
+      step.type === "fill" ? { ...step, value: "[redacted]" } : step,
+    ),
   };
 }
 
@@ -864,6 +882,18 @@ export const AuthCaptureSchema = z.object({
   createdAt: z.string(),
   capturedAt: z.string().optional(),
   lastError: z.string().optional(),
+  /**
+   * Auto-recorded while the capture browser was open (clicks and field
+   * fills the user actually performed, translated into the same
+   * WorkflowStep vocabulary ConfigSchema.setupSteps uses) — a replayable
+   * login recipe the user can review/edit, then save onto the project
+   * (`scanConfig.setupSteps`) so a future session refresh never needs a
+   * human to log in by hand again. Empty when nothing was recorded (e.g.
+   * the capture failed before any interaction) or the user hasn't finished
+   * reviewing it yet. Any password-field fill in here always has
+   * `value: ""` (`secret: true`) — see WorkflowStepSchema's `fill` variant.
+   */
+  loginSteps: z.array(WorkflowStepSchema).max(30).default([]),
 });
 export type AuthCapture = z.infer<typeof AuthCaptureSchema>;
 

@@ -102,6 +102,29 @@ function buildSearchFlow(startUrl: string, urlPattern: string): Flow {
   };
 }
 
+// Inferred flow (packages/mcp/src/mining-tools.ts's propose_capability with
+// no `proof`): neither expectedRequest nor expectedNavigation set, same as
+// a real "the elements exist but discovery's policy never let this action
+// actually execute" capability. "Show filters" is a real, purely
+// client-side toggle (no network call, no navigation) — the exact shape an
+// inferred flow has.
+function buildInferredFlow(startUrl: string): Flow {
+  return {
+    id: randomUUID(),
+    runId: randomUUID(),
+    startUrl,
+    kind: "atomic",
+    navigations: [],
+    steps: [
+      {
+        elementSignature: "button#filter-toggle",
+        locators: [roleLocator("button", "Show filters")],
+        action: "click",
+      },
+    ],
+  };
+}
+
 function buildCapability(flowId: string, secondaryFlowId?: string): Capability {
   return {
     id: randomUUID(),
@@ -163,6 +186,32 @@ describe("VerificationRunner", () => {
     expect(run.passCount).toBe(3);
     expect(run.evidenceIds.length).toBe(3);
     expect(run.status).toBe("verified");
+  }, 30000);
+
+  // Regression test: an inferred capability (no expectedRequest/
+  // expectedNavigation at all) has NO possible outcome to check — every
+  // attempt would hit that branch identically. Before fixing runner.ts to
+  // treat "replayed 3x without erroring" as a pass for this specific case,
+  // the very first attempt immediately produced `kind:"inconclusive"` and
+  // broke the repeatability loop, so an inferred capability could NEVER
+  // reach "verified" no matter how reliably it replayed — a permanent dead
+  // end despite the action genuinely working every time.
+  it("ends verified for an inferred (no-proof) capability once it replays 3 times without erroring", async () => {
+    const flow = buildInferredFlow(`http://127.0.0.1:${PORT}/projects`);
+    store.saveFlow(flow);
+    const capability = {
+      ...buildCapability(flow.id),
+      risk: "read" as const,
+      evidenceKinds: ["inferred" as const],
+    };
+    store.saveCapability(capability);
+
+    const runner = new VerificationRunner(store);
+    const run = await runner.run(capability.id);
+
+    expect(run.passCount).toBe(3);
+    expect(run.status).toBe("verified");
+    expect(store.capability(capability.id)?.status).toBe("verified");
   }, 30000);
 
   // Regression test: Stage F's WebMCP tool execution used to surface

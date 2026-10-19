@@ -15,6 +15,7 @@ import {
   handleProjectAppMcpPost,
   handleProjectAppMcpGet,
   handleProjectAppMcpDelete,
+  authenticateToolDefinition,
 } from "../../../packages/mcp/src/app-server.js";
 import { createAuth } from "./auth.js";
 import { VerificationRunner } from "../../../packages/verification/src/runner.js";
@@ -47,6 +48,11 @@ import {
   forgetAuthCapture,
   AuthCaptureConflictError,
 } from "./auth-capture.js";
+import {
+  refreshProjectAuthSession,
+  NoLoginRecipeError,
+  MissingSecretError,
+} from "./auth-session.js";
 import { connectBrowseMcpClient } from "../../../packages/mcp/src/browse-tools.js";
 import {
   toModelContextTool,
@@ -224,7 +230,21 @@ app.use((req, res, next) => {
     res.status(403).json({ error: "Host not allowed" });
     return;
   }
-  if (origin && !allowedOrigins.has(origin)) {
+  // Origin-checking exists to stop a malicious WEBPAGE from riding a
+  // victim's browser session (ambient cookies) to call this API — classic
+  // CSRF. A request authenticating with a Bearer token (a personal access
+  // token, an Auth0 access token, an external MCP client like AppMCP's own
+  // setup panel tells people to configure — apps/dashboard/src/flow-appmcp-views.tsx)
+  // isn't exposed to that attack at all: a hostile page has no way to read
+  // or attach a secret it was never handed, no matter what Origin it runs
+  // from. Enforcing this check against non-browser Bearer clients only
+  // produces false positives — several set an Origin header of their own
+  // (the MCP spec's own Streamable HTTP guidance recommends it, even for
+  // non-browser clients) that was never going to be in this small
+  // browser-origin allowlist, silently 403ing a perfectly legitimate,
+  // correctly-authenticated connection.
+  const bearer = /^Bearer\s+/i.test(req.get("authorization") || "");
+  if (origin && !bearer && !allowedOrigins.has(origin)) {
     res.status(403).json({ error: "Origin not allowed" });
     return;
   }
@@ -658,18 +678,94 @@ app.get("/api/projects/:id/browse/webmcp-tools", (req, res) => {
   res.json(tools);
 });
 // Same catalog shape as above, for the dashboard's AppMCP tab — every
-// `published` capability this project owns, the tool list any MCP client
-// connected to /api/projects/:id/appmcp would see from tools/list.
+// `published` capability this project owns, PLUS the "Authenticate" tool
+// (packages/mcp/src/app-server.ts) when this project has a saved login
+// recipe — exactly the tool list any MCP client connected to
+// /api/projects/:id/appmcp would see from tools/list, not just the
+// discovered-capability subset of it.
 app.get("/api/projects/:id/appmcp-tools", (req, res) => {
   const ownerId = userId(res);
   const project = store.project(req.params.id, ownerId);
-  const tools = publishedCandidatesForProject(store, project.id).map(
-    ({ capability }) => ({
-      ...toModelContextTool(capability),
-      risk: capability.risk,
-    }),
-  );
+  const authTool = authenticateToolDefinition(store, project.id, ownerId);
+  const tools = [
+    ...(authTool
+      ? [
+          {
+            name: authTool.name,
+            description: authTool.description,
+            inputSchema: authTool.inputSchema,
+            annotations: {
+              readOnlyHint: authTool.annotations.readOnlyHint,
+              consequentialHint: authTool.annotations.destructiveHint,
+            },
+            risk: "reversible_write" as const,
+          },
+        ]
+      : []),
+    ...publishedCandidatesForProject(store, project.id).map(
+      ({ capability }) => ({
+        ...toModelContextTool(capability),
+        risk: capability.risk,
+      }),
+    ),
+  ];
   res.json(tools);
+});
+// For the dashboard's "Regular MCP" tab — the exact tool catalog (name,
+// description, inputSchema, annotations) a real client connected to
+// /api/projects/:id/mcp would see from tools/list, built by spinning up the
+// same in-process server/client pair the assistant panel's /agent/chat route
+// already uses (connectProjectMcpClient), rather than hand-maintaining a
+// second list.
+app.get("/api/projects/:id/mcp-tools", async (req, res, next) => {
+  let connection:
+    | Awaited<ReturnType<typeof connectProjectMcpClient>>
+    | undefined;
+  try {
+    const ownerId = userId(res);
+    const project = store.project(req.params.id, ownerId);
+    connection = await connectProjectMcpClient(
+      store,
+      project.id,
+      ({ name, seeds }) => {
+        if (project.archivedAt)
+          throw new Error("Archived projects cannot start a discovery");
+        const defaults = store.userSettings(ownerId).discovery;
+        const config = ConfigSchema.parse({
+          ...project.scanConfig,
+          ...defaults,
+          name: name || project.name,
+          seeds: seeds ?? project.scanConfig.seeds,
+          denyActionKeywords: [
+            ...new Set([
+              ...project.scanConfig.denyActionKeywords,
+              ...defaults.denyActionKeywords,
+            ]),
+          ],
+        });
+        const run = store.createRun(config, project.id, ownerId);
+        void coordinator
+          .start(run.id)
+          .catch((error) =>
+            console.error("MCP discovery failed:", error.message),
+          );
+        return store.summary(run.id, ownerId);
+      },
+    );
+    const listed = await connection.client.listTools();
+    res.json(
+      (listed.tools as any[]).map((tool) => ({
+        name: tool.name,
+        description: tool.description || tool.name,
+        inputSchema: tool.inputSchema,
+        annotations: tool.annotations,
+      })),
+    );
+  } catch (error) {
+    next(error);
+  } finally {
+    await connection?.close();
+  }
 });
 app.get("/api/projects/:id/browse/sessions/:sessionId/events", (req, res) => {
   const ownerId = userId(res);
@@ -1127,6 +1223,80 @@ app.delete(
     }
   },
 );
+// Points the project's own scanConfig.authStatePath at an already-captured
+// session (dashboard's project-page "Use this session", as opposed to
+// NewScan's wizard which only sets it on that ONE new discovery's own
+// draft config) — this is what makes verification's resolveAuthStatePath
+// (packages/verification/src/runner.ts) see it project-wide immediately.
+app.post("/api/projects/:id/auth-captures/:captureId/use", (req, res, next) => {
+  try {
+    const ownerId = userId(res);
+    const project = store.project(req.params.id, ownerId);
+    const capture = store.authCapture(req.params.captureId, ownerId);
+    if (!capture || capture.projectId !== project.id || !capture.path)
+      throw new Error("Login capture not found");
+    const updated = store.updateProjectAuthStatePath(
+      project.id,
+      capture.path,
+      ownerId,
+    );
+    res.json({ project: updated });
+  } catch (error) {
+    next(error);
+  }
+});
+// Project-level login recipe: the (auto-recorded, then human-reviewed)
+// WorkflowStep sequence a "Refresh session" call below replays headlessly.
+// Reuses project.scanConfig.setupSteps — the same field a new discovery's
+// wizard already seeds its own draft from — via a narrow dedicated route
+// rather than the generic project-settings PATCH (see
+// Store.updateProjectLoginRecipe's doc comment).
+app.put("/api/projects/:id/login-recipe", (req, res, next) => {
+  try {
+    const ownerId = userId(res);
+    const project = store.updateProjectLoginRecipe(
+      req.params.id,
+      req.body?.setupSteps,
+      ownerId,
+    );
+    // `secrets` (step index -> real value, for any `secret:true` fill step)
+    // is optional and separate from `setupSteps` itself — present (even an
+    // empty object, an explicit "clear them") only when the user actually
+    // typed a value into the save flow's secret fields
+    // (apps/dashboard/src/flow-auth-capture-views.tsx). Omitted entirely
+    // means "I'm only editing steps, leave whatever secrets are already
+    // saved alone" — a recipe edit that doesn't touch the password field
+    // must never silently wipe it.
+    if (req.body?.secrets !== undefined)
+      store.saveProjectAuthSecrets(project.id, req.body.secrets);
+    res.json({ setupSteps: project.scanConfig.setupSteps });
+  } catch (error) {
+    next(error);
+  }
+});
+// Headless session refresh (apps/server/src/auth-session.ts): replays the
+// project's login recipe in a real headless browser and saves the result as
+// the project's current session — no headed browser, no manual re-login,
+// once the recipe exists. `secrets` supplies any `secret:true` fill step's
+// real value for just this one call; never persisted, never logged.
+app.post("/api/projects/:id/auth-session/refresh", async (req, res, next) => {
+  try {
+    const ownerId = userId(res);
+    const result = await refreshProjectAuthSession(
+      store,
+      req.params.id,
+      ownerId,
+      req.body?.secrets || {},
+    );
+    res.json(result);
+  } catch (error) {
+    if (error instanceof NoLoginRecipeError)
+      return res.status(409).json({ error: error.message });
+    if (error instanceof MissingSecretError)
+      return res.status(400).json({ error: error.message });
+    next(error);
+  }
+});
 app.post("/api/projects/:id/discoveries", (req, res) => {
   const ownerId = userId(res);
   const project = store.project(req.params.id, ownerId);

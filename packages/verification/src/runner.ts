@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { Browser, Page, Response as PlaywrightResponse } from "playwright";
@@ -250,6 +249,13 @@ async function replayWithCorrelation(
   resolveRequiredFlow?: (
     capabilityId: string,
   ) => Promise<RequiredFlowResolution | undefined>,
+  // How long to let resolveTarget poll for a step's target before giving up
+  // (see replayCapability's `targetTimeoutMs` doc comment) — distinct from
+  // `actionTimeoutMs`'s OTHER effect (page.setDefaultTimeout(), covering
+  // Playwright's own auto-wait once a target IS resolved), but driven by
+  // the same configured value since both answer "how patient should this
+  // run be."
+  targetTimeoutMs?: number,
 ): Promise<{ result: ReplayResult; correlationLevel: CorrelationLevel }> {
   const attemptId = randomUUID();
   const observed: ApiCall[] = [];
@@ -288,6 +294,8 @@ async function replayWithCorrelation(
       navigationTimeoutMs,
       expectTimeoutMs,
       resolveRequiredFlow,
+      undefined,
+      targetTimeoutMs,
     );
   } finally {
     page.off("response", onResponse);
@@ -363,29 +371,20 @@ export class VerificationRunner {
   ) {}
 
   /**
-   * The discovery run's saved login session (`ScanConfig.authStatePath`,
-   * the same file `packages/worker/src/index.ts` hands to its own
-   * `browser.newContext()`), so a capability mined from an authenticated
-   * crawl is replayed authenticated too — otherwise every attempt below
-   * hits the app as a logged-out visitor and fails for reasons that have
-   * nothing to do with whether the flow itself is correct.
-   * `store.run` (unlike `store.data`/`store.summary`) returns the
-   * unredacted config; `store.data().run.config.authStatePath` would only
-   * ever be the redacted `"[local session]"` placeholder. Advisory, not
-   * fatal: a lookup failure (ownerId mismatch, run missing) just means
-   * verification falls back to an unauthenticated context, same as before
-   * this existed.
+   * A saved login session to replay authenticated with, so a capability
+   * mined from an authenticated crawl is verified authenticated too —
+   * otherwise every attempt below hits the app as a logged-out visitor and
+   * fails for reasons that have nothing to do with whether the flow itself
+   * is correct. Delegates to `Store.resolveFlowAuthStatePath` — shared with
+   * packages/mcp/src/app-server.ts's AppMCP tool execution, which needs the
+   * exact same "prefer the project's current session over this specific
+   * run's frozen one" preference for the identical reason.
    */
   private resolveAuthStatePath(
     flow: Flow,
     ownerId?: string,
   ): string | undefined {
-    try {
-      const path = this.store.run(flow.runId, ownerId).config.authStatePath;
-      return path && existsSync(path) ? path : undefined;
-    } catch {
-      return undefined;
-    }
+    return this.store.resolveFlowAuthStatePath(flow.runId, ownerId);
   }
 
   async run(
@@ -566,6 +565,7 @@ export class VerificationRunner {
               navigationTimeoutMs,
               expectTimeoutMs,
               resolveRequiredFlow,
+              actionTimeoutMs,
             );
             const evidence = this.store.saveEvidence({
               id: randomUUID(),
@@ -609,13 +609,28 @@ export class VerificationRunner {
               outcome = { kind: "pass", evidenceId: evidence.id };
             } else if (!flow.expectedRequest && !flow.expectedNavigation) {
               // Inferred capability (packages/mcp/src/mining-tools.ts's
-              // propose_capability with no `proof`): replay reached this
-              // point without throwing — the real, resolved elements
-              // accepted the action — but there was never a recorded network
-              // call or navigation to confirm an actual outcome against.
-              // Honest signal is "ran without erroring, unconfirmed," not a
-              // guessed pass or a misleading "bad response" failure.
-              outcome = { kind: "inconclusive", category: "no_outcome_proof" };
+              // propose_capability with no `proof`): there is no recorded
+              // network call or navigation to confirm an actual outcome
+              // against, by design, not because this attempt went wrong —
+              // every attempt would hit this exact branch every time, so
+              // treating it as "inconclusive" (as this used to) meant the
+              // repeatability loop broke on attempt 1 and the capability
+              // could never reach "verified" no matter how many times it
+              // replayed cleanly. The only honest thing replay CAN confirm
+              // here is that the real, resolved elements accepted the
+              // action without erroring — 3 independent times, same
+              // repeatability gate as everything else — which is what
+              // "pass" means for this specific case. This branch is only
+              // ever reached for a read-risk capability (a non-read one
+              // with no proof already failed `insufficient_correlation`
+              // above — plan §8 still reserves the hard mutation-proof
+              // requirement for writes), so the risk profile here is
+              // already the safest case. The capability's own
+              // `evidenceKinds` ("inferred") still carries the "never
+              // actually observed, no outcome proof" caveat forward into
+              // the registry — "verified" here never claims more than
+              // "replays reliably," not "business outcome confirmed."
+              outcome = { kind: "pass", evidenceId: evidence.id };
             } else {
               outcome = {
                 kind: "fail",
@@ -663,7 +678,9 @@ export class VerificationRunner {
             stage,
             message:
               outcome.kind === "pass"
-                ? "Passed — response matched the expected outcome."
+                ? flow.expectedRequest || flow.expectedNavigation
+                  ? "Passed — response matched the expected outcome."
+                  : "Passed — the real elements accepted the action without erroring (inferred capability: no recorded network call or navigation to confirm the actual outcome against)."
                 : outcome.kind === "inconclusive"
                   ? `Inconclusive — ${outcome.category}`
                   : `Failed — ${outcome.category}`,
@@ -735,6 +752,8 @@ export class VerificationRunner {
                 navigationTimeoutMs,
                 expectTimeoutMs,
                 resolveRequiredFlow,
+                undefined,
+                actionTimeoutMs,
               ),
           );
           const toolName = registration.registered[0];
@@ -837,21 +856,34 @@ export class VerificationRunner {
               }
             }
             if (adapterResult) {
-              const ok = businessSuccess(
-                adapterResult.status,
-                adapterResult.results,
-                Boolean(flow.expectedNavigation),
-              );
+              // Inferred flow (no expectedRequest/expectedNavigation): same
+              // "nothing to check a business outcome against, by design"
+              // case as the direct-replay attempts above — executeTool()
+              // resolving without throwing (reached this branch at all) is
+              // the whole of what can honestly be confirmed, not a status
+              // code businessSuccess can meaningfully evaluate (adapterResult
+              // is always the {status:0,...} sentinel here).
+              const isInferred =
+                !flow.expectedRequest && !flow.expectedNavigation;
+              const ok =
+                isInferred ||
+                businessSuccess(
+                  adapterResult.status,
+                  adapterResult.results,
+                  Boolean(flow.expectedNavigation),
+                );
               emit({
                 type: "log",
                 stage: "adapter-contract",
-                message: `Tool responded with status ${adapterResult.status}, result ${
-                  adapterResult.results === undefined
-                    ? "undefined (response body wasn't valid JSON)"
-                    : Array.isArray(adapterResult.results)
-                      ? `an array of ${adapterResult.results.length}`
-                      : typeof adapterResult.results
-                } — ${ok ? "matches" : "does NOT match"} the expected outcome.`,
+                message: isInferred
+                  ? "Tool executed without erroring — inferred capability: no recorded network call or navigation to confirm the actual outcome against."
+                  : `Tool responded with status ${adapterResult.status}, result ${
+                      adapterResult.results === undefined
+                        ? "undefined (response body wasn't valid JSON)"
+                        : Array.isArray(adapterResult.results)
+                          ? `an array of ${adapterResult.results.length}`
+                          : typeof adapterResult.results
+                    } — ${ok ? "matches" : "does NOT match"} the expected outcome.`,
               });
               if (!ok) {
                 status = "failed";

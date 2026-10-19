@@ -33,6 +33,7 @@ import {
   type CapabilityCandidate,
 } from "../../capability-core/src/types.js";
 import { pathnameOf } from "../../capability-core/src/correlation.js";
+import { slug } from "../../capability-core/src/miner.js";
 
 const text = (value: unknown) => ({
   content: [{ type: "text" as const, text: JSON.stringify(value, null, 2) }],
@@ -323,7 +324,16 @@ export function registerMiningTools(
             elementSignature: element.structuralSignature,
             locators: element.locatorCandidates,
             action: step.action,
-            inputField: step.inputField,
+            // Slugified the same way every deterministically-mined
+            // inputField already is (packages/capability-core/src/miner.ts) —
+            // the LLM names this field freely (it has no reason to know this
+            // needs to be a safe identifier), but it ends up both a
+            // FlowStep.inputField AND a JSON Schema / generated-sample-code
+            // property name (apps/dashboard/src/flow-capabilities-views.tsx's
+            // `input.${inputField}` dot-notation reference), which an
+            // unsluggified human-readable label like "patient name or ID"
+            // breaks.
+            inputField: step.inputField ? slug(step.inputField) : undefined,
           };
         });
 

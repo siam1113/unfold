@@ -45,9 +45,10 @@ function stepSummary(step: WorkflowStep): string {
     case "click":
       return step.selector || "(no selector)";
     case "fill":
-      return step.selector
-        ? `${step.selector} = "${step.value}"`
-        : "(no selector)";
+      if (!step.selector) return "(no selector)";
+      return step.secret
+        ? `${step.selector} = (secret — provided at refresh time)`
+        : `${step.selector} = "${step.value}"`;
     case "waitFor":
       return step.text
         ? `text "${step.text}"`
@@ -195,16 +196,40 @@ export function SetupStepsEditor({
                 </label>
               )}
               {step.type === "fill" && (
-                <label>
-                  Value
-                  <input
-                    value={step.value}
-                    onChange={(e) =>
-                      update(index, { ...step, value: e.target.value })
-                    }
-                    placeholder="demo"
-                  />
-                </label>
+                <>
+                  <label className="setup-step-secret-toggle">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(step.secret)}
+                      onChange={(e) =>
+                        update(index, {
+                          ...step,
+                          secret: e.target.checked,
+                          value: e.target.checked ? "" : step.value,
+                        })
+                      }
+                    />
+                    This is a password / secret — never store the value
+                  </label>
+                  {step.secret ? (
+                    <p className="wizard-help">
+                      No value is stored for this step. You'll be asked to
+                      provide it fresh, in memory only, each time you refresh
+                      the session.
+                    </p>
+                  ) : (
+                    <label>
+                      Value
+                      <input
+                        value={step.value}
+                        onChange={(e) =>
+                          update(index, { ...step, value: e.target.value })
+                        }
+                        placeholder="demo"
+                      />
+                    </label>
+                  )}
+                </>
               )}
               {step.type === "waitFor" && (
                 <>

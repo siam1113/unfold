@@ -6,8 +6,16 @@ import {
   CheckCircle2,
   Trash2,
   ShieldCheck,
+  Save,
+  RefreshCw,
+  ShieldX,
 } from "lucide-react";
-import type { AuthCapture } from "../../../packages/shared/src/index";
+import type {
+  AuthCapture,
+  ScanConfig,
+  WorkflowStep,
+} from "../../../packages/shared/src/index";
+import { SetupStepsEditor } from "./flow-setup-steps";
 import "./flow-auth-capture-views.css";
 
 // Server contract (apps/server/src/index.ts):
@@ -70,6 +78,16 @@ export function AuthCaptureWizard({
   const [finishing, setFinishing] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [error, setError] = useState("");
+  const [recipeDraft, setRecipeDraft] = useState<WorkflowStep[]>([]);
+  const [savingRecipe, setSavingRecipe] = useState(false);
+  const [recipeSaved, setRecipeSaved] = useState(false);
+  // Secret-flagged fill steps (packages/mcp's Authenticate tool needs a real
+  // value to log in on the agent's behalf) always arrive with an empty
+  // value — the recorder never lets a password reach the server at all
+  // (see the module doc comment below). The user types it here, explicitly,
+  // only at save time; apps/server/src/index.ts's login-recipe route
+  // encrypts it at rest and this component never requests it back.
+  const [secretDraft, setSecretDraft] = useState<Record<number, string>>({});
 
   const basePath = `/projects/${projectId}/auth-captures`;
 
@@ -95,10 +113,38 @@ export function AuthCaptureWizard({
         `${basePath}/${capture.id}/finish`,
       );
       setCapture(done);
+      setRecipeDraft(done.loginSteps ?? []);
     } catch (e) {
       setError((e as Error).message);
     } finally {
       setFinishing(false);
+    }
+  };
+
+  const secretSteps = recipeDraft
+    .map((step, index) => ({ step, index }))
+    .filter(({ step }) => step.type === "fill" && step.secret);
+
+  const saveRecipe = async () => {
+    setSavingRecipe(true);
+    setError("");
+    try {
+      await apiRequest(
+        `/projects/${projectId}/login-recipe`,
+        {
+          setupSteps: recipeDraft,
+          // Only sent when at least one secret field is on screen —
+          // omitting the key entirely (vs. an empty object) tells the
+          // server "leave whatever's already saved alone," not "clear it".
+          ...(secretSteps.length ? { secrets: secretDraft } : {}),
+        },
+        "PUT",
+      );
+      setRecipeSaved(true);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setSavingRecipe(false);
     }
   };
 
@@ -224,6 +270,65 @@ export function AuthCaptureWizard({
                 </p>
               </div>
             </div>
+            {recipeDraft.length > 0 && (
+              <div className="auth-capture-recipe">
+                <p className="wizard-help">
+                  We watched what you clicked and typed and turned it into a
+                  replayable login recipe below — review it, then save it so a
+                  future session refresh never needs you to log in by hand
+                  again. Remove anything that was just incidental clicking
+                  around.
+                </p>
+                <SetupStepsEditor
+                  steps={recipeDraft}
+                  onChange={setRecipeDraft}
+                />
+                {secretSteps.length > 0 && (
+                  <div className="auth-session-secrets">
+                    <p className="wizard-help">
+                      Enter the real value for each secret field below so the
+                      Authenticate tool can log in on an agent's behalf — stored
+                      encrypted, never shown again after you save.
+                    </p>
+                    {secretSteps.map(({ step, index }) => (
+                      <label key={index}>
+                        {step.description || `Secret field (step ${index + 1})`}
+                        <input
+                          type="password"
+                          value={secretDraft[index] || ""}
+                          onChange={(e) =>
+                            setSecretDraft((prev) => ({
+                              ...prev,
+                              [index]: e.target.value,
+                            }))
+                          }
+                          placeholder="Stored encrypted"
+                        />
+                      </label>
+                    ))}
+                  </div>
+                )}
+                <div className="modal-actions">
+                  <button
+                    type="button"
+                    className="button primary"
+                    onClick={saveRecipe}
+                    disabled={savingRecipe}
+                  >
+                    {savingRecipe ? (
+                      <Loader2 size={15} className="flow-cap-spin" />
+                    ) : (
+                      <Save size={15} />
+                    )}
+                    {savingRecipe
+                      ? "Saving…"
+                      : recipeSaved
+                        ? "Saved — save again"
+                        : "Save as project login recipe"}
+                  </button>
+                </div>
+              </div>
+            )}
             <div className="modal-actions">
               <button type="button" className="button" onClick={onClose}>
                 Close
@@ -344,6 +449,132 @@ export function AuthCaptureList({
           </button>
         </label>
       ))}
+    </div>
+  );
+}
+
+/**
+ * Project page's persistent session section — not the wizard above (a
+ * one-time capture flow), this is the ongoing answer to "the session
+ * expired, how do I fix verification without re-running discovery": a
+ * manual re-authenticate action (opens the same wizard) plus, once a login
+ * recipe exists (`scanConfig.setupSteps`, saved from the wizard's recorded-
+ * steps review), a one-click headless refresh
+ * (POST .../auth-session/refresh) that never needs a human to log in by
+ * hand again. Any `secret:true` fill step's real value is collected here,
+ * in local state only, and sent once per refresh — never persisted.
+ */
+export function AuthSessionPanel({
+  projectId,
+  scanConfig,
+  onReauthenticate,
+  onRefreshed,
+}: {
+  projectId: string;
+  scanConfig: ScanConfig;
+  onReauthenticate: () => void;
+  onRefreshed: () => void;
+}) {
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [secrets, setSecrets] = useState<Record<number, string>>({});
+
+  const steps = scanConfig.setupSteps ?? [];
+  const secretSteps = steps
+    .map((step, index) => ({ step, index }))
+    .filter(
+      (
+        entry,
+      ): entry is {
+        step: WorkflowStep & { type: "fill"; secret: true };
+        index: number;
+      } => entry.step.type === "fill" && Boolean(entry.step.secret),
+    );
+  const hasRecipe = steps.length > 0;
+  const hasSession = Boolean(scanConfig.authStatePath);
+  const canRefresh =
+    hasRecipe && secretSteps.every((s) => secrets[s.index]?.length);
+
+  const refresh = async () => {
+    setRefreshing(true);
+    setError("");
+    setNotice("");
+    try {
+      const result = await apiRequest<{
+        cookieCount: number;
+        domains: string[];
+      }>(`/projects/${projectId}/auth-session/refresh`, { secrets });
+      setNotice(
+        `Refreshed — ${result.cookieCount} cookie${result.cookieCount === 1 ? "" : "s"} for ${result.domains.join(", ") || "this app"}.`,
+      );
+      setSecrets({});
+      onRefreshed();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  return (
+    <div className="auth-session-panel">
+      <div className="auth-session-status">
+        {hasSession ? <ShieldCheck size={16} /> : <ShieldX size={16} />}
+        <div>
+          <strong>
+            {hasSession ? "Session active" : "No session captured"}
+          </strong>
+          <p>
+            {hasSession
+              ? "Discovery and verification use this session when the app needs you to be signed in."
+              : "Capture a login session if this app needs you to be signed in to explore it fully."}
+          </p>
+        </div>
+      </div>
+      {error && <div className="error-banner">{error}</div>}
+      {notice && <div className="auth-session-notice">{notice}</div>}
+      {hasRecipe && secretSteps.length > 0 && (
+        <div className="auth-session-secrets">
+          {secretSteps.map(({ step, index }) => (
+            <label key={index}>
+              {step.description || `Secret field (step ${index + 1})`}
+              <input
+                type="password"
+                value={secrets[index] || ""}
+                onChange={(e) =>
+                  setSecrets((prev) => ({ ...prev, [index]: e.target.value }))
+                }
+                placeholder="Never stored — provided fresh each refresh"
+              />
+            </label>
+          ))}
+        </div>
+      )}
+      <div className="auth-session-actions">
+        <button type="button" className="button" onClick={onReauthenticate}>
+          <KeyRound size={14} />
+          Re-authenticate
+        </button>
+        {hasRecipe && (
+          <button
+            type="button"
+            className="button primary"
+            onClick={refresh}
+            disabled={refreshing || !canRefresh}
+            title={
+              canRefresh ? undefined : "Fill in every secret field above first"
+            }
+          >
+            {refreshing ? (
+              <Loader2 size={14} className="flow-cap-spin" />
+            ) : (
+              <RefreshCw size={14} />
+            )}
+            {refreshing ? "Refreshing…" : "Refresh session"}
+          </button>
+        )}
+      </div>
     </div>
   );
 }

@@ -715,8 +715,13 @@ const FRAMEWORK_CODE_LABEL: Record<
   chrome: "Chrome DevTools Recorder",
 };
 
-/** `step.inputField` is a property name off the capability's own inputSchema (see onSetRequired/Input schema section above), so `input.<field>` reads as "the caller-supplied value for this field" in every generated snippet below. */
-const inputRef = (step: FlowStepType) => `input.${step.inputField ?? "value"}`;
+/** `step.inputField` is a property name off the capability's own inputSchema (see onSetRequired/Input schema section above), so `input.<field>` reads as "the caller-supplied value for this field" in every generated snippet below. Bracket-notates when the field isn't a plain identifier (a pre-existing capability mined before mining-tools.ts started slugifying LLM-supplied field names could still have one with spaces/punctuation) — dot notation would otherwise emit invalid code. */
+const inputRef = (step: FlowStepType) => {
+  const field = step.inputField ?? "value";
+  return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(field)
+    ? `input.${field}`
+    : `input[${JSON.stringify(field)}]`;
+};
 
 function toPlaywrightCode(flow: Flow): string {
   return flow.steps

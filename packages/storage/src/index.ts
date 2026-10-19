@@ -2,9 +2,15 @@ import type { DatabaseSync as DatabaseType } from "node:sqlite";
 const { DatabaseSync } = process.getBuiltinModule(
   "node:sqlite",
 ) as typeof import("node:sqlite");
-import { mkdirSync, chmodSync } from "node:fs";
+import { mkdirSync, chmodSync, existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { randomUUID } from "node:crypto";
+import {
+  randomUUID,
+  randomBytes,
+  createCipheriv,
+  createDecipheriv,
+  scryptSync,
+} from "node:crypto";
 import {
   ConfigSchema,
   publicConfig,
@@ -80,6 +86,59 @@ export function routeShard(url: string, concurrency: number): number {
   // events, currentPages) — match that instead of returning 0-indexed.
   return ((h >>> 0) % concurrency) + 1;
 }
+
+// AES-256-GCM seal/unseal for a project's login-recipe secrets (any
+// `secret: true` fill step's real value — packages/shared/src/index.ts's
+// WorkflowStepSchema — supplied explicitly by the user when they save the
+// recipe, specifically so the AppMCP "Authenticate" tool
+// (packages/mcp/src/app-server.ts) can log in on an agent's behalf without
+// asking a human to retype a password every time). Deliberately its own
+// derivation, independent of apps/server/src/auth.ts's own seal/unseal
+// (which only exists inside createAuth()'s closure, gated on Auth0 actually
+// being configured) — reuses the same AUTH0_SECRET key material (already
+// documented as "the app's private session key" in .env.example) under a
+// distinct label, rather than a second env var for what is, operationally,
+// the same kind of secret. Lives in this package (not apps/server) because
+// packages/mcp/src/app-server.ts — a package, which must not import from
+// apps/server — needs to unseal these too.
+let cachedSecretKey: Buffer | undefined;
+function secretEncryptionKey(): Buffer {
+  if (cachedSecretKey) return cachedSecretKey;
+  const secret = process.env.AUTH0_SECRET;
+  if (!secret)
+    throw new Error(
+      "AUTH0_SECRET must be configured to store or read an encrypted login secret",
+    );
+  cachedSecretKey = scryptSync(secret, "unfold-login-secrets", 32);
+  return cachedSecretKey;
+}
+function sealSecret(value: unknown): string {
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", secretEncryptionKey(), iv);
+  const ciphertext = Buffer.concat([
+    cipher.update(JSON.stringify(value), "utf8"),
+    cipher.final(),
+  ]);
+  return [iv, cipher.getAuthTag(), ciphertext]
+    .map((part) => part.toString("base64url"))
+    .join(".");
+}
+function unsealSecret<T>(value: string): T {
+  const [ivValue, tagValue, ciphertextValue] = value.split(".");
+  if (!ivValue || !tagValue || !ciphertextValue)
+    throw new Error("Invalid encrypted login secret");
+  const decipher = createDecipheriv(
+    "aes-256-gcm",
+    secretEncryptionKey(),
+    Buffer.from(ivValue, "base64url"),
+  );
+  decipher.setAuthTag(Buffer.from(tagValue, "base64url"));
+  const plaintext = Buffer.concat([
+    decipher.update(Buffer.from(ciphertextValue, "base64url")),
+    decipher.final(),
+  ]).toString("utf8");
+  return JSON.parse(plaintext) as T;
+}
 export class Store {
   db: DatabaseType;
   constructor(path = resolve(dataRoot(), "unfold.sqlite")) {
@@ -127,6 +186,7 @@ export class Store {
    CREATE INDEX IF NOT EXISTS workflow_run_workflows ON workflow_runs(workflow_id);
    CREATE TABLE IF NOT EXISTS framework_projects(id TEXT PRIMARY KEY,project_id TEXT NOT NULL UNIQUE,owner_id TEXT NOT NULL,data TEXT NOT NULL);
    CREATE TABLE IF NOT EXISTS framework_github_tokens(framework_project_id TEXT PRIMARY KEY,token TEXT NOT NULL);
+   CREATE TABLE IF NOT EXISTS project_auth_secrets(project_id TEXT PRIMARY KEY,ciphertext TEXT NOT NULL);
    CREATE TABLE IF NOT EXISTS test_runs(id TEXT PRIMARY KEY,framework_project_id TEXT NOT NULL,owner_id TEXT NOT NULL,data TEXT NOT NULL);
    CREATE INDEX IF NOT EXISTS test_run_framework_projects ON test_runs(framework_project_id);
    CREATE TABLE IF NOT EXISTS package_operations(id TEXT PRIMARY KEY,framework_project_id TEXT NOT NULL,owner_id TEXT NOT NULL,data TEXT NOT NULL);
@@ -262,6 +322,146 @@ export class Store {
       .run(JSON.stringify(next), id);
     return next;
   }
+  /**
+   * Replaces the project's `scanConfig.setupSteps` — the project-level login
+   * recipe a "Refresh session" action (apps/server/src/auth-session.ts)
+   * replays headlessly, and that every new discovery's wizard seeds its own
+   * draft from. Deliberately its own narrow method rather than folded into
+   * `updateProject`'s generic whitelist: unlike name/description, this can
+   * carry a (redacted-at-read-time, but not at-rest) credential-shaped fill
+   * value, so it gets a dedicated route with its own intent rather than
+   * blending into the general-purpose project-settings PATCH.
+   */
+  updateProjectLoginRecipe(
+    id: string,
+    setupSteps: unknown,
+    ownerId?: string,
+  ): Project {
+    const project = this.project(id, ownerId);
+    const next = ProjectSchema.parse({
+      ...project,
+      scanConfig: { ...project.scanConfig, setupSteps },
+      updatedAt: new Date().toISOString(),
+    });
+    this.db
+      .prepare("UPDATE projects SET data=? WHERE id=?")
+      .run(JSON.stringify(next), id);
+    return next;
+  }
+  /**
+   * Points the project's `scanConfig.authStatePath` at a freshly captured or
+   * refreshed session file — never client-driven directly (no route accepts
+   * an arbitrary path here; it's always a path this server itself just
+   * wrote to, from auth-capture.ts's manual capture or auth-session.ts's
+   * headless refresh). `packages/verification/src/runner.ts`'s
+   * `resolveAuthStatePath` prefers this project-level path over whatever a
+   * specific past discovery run's own config happened to freeze in, so one
+   * refresh here immediately un-blocks verification for every capability in
+   * the project, not just future discovery runs.
+   */
+  updateProjectAuthStatePath(
+    id: string,
+    authStatePath: string,
+    ownerId?: string,
+  ): Project {
+    const project = this.project(id, ownerId);
+    const next = ProjectSchema.parse({
+      ...project,
+      scanConfig: { ...project.scanConfig, authStatePath },
+      updatedAt: new Date().toISOString(),
+    });
+    this.db
+      .prepare("UPDATE projects SET data=? WHERE id=?")
+      .run(JSON.stringify(next), id);
+    return next;
+  }
+  /**
+   * A saved login session to replay/execute a flow authenticated with —
+   * shared by every caller that needs to attach cookies to a live
+   * Playwright context before running a capability's flow
+   * (packages/verification/src/runner.ts's repeatability attempts,
+   * packages/mcp/src/app-server.ts's AppMCP tool execution). Prefers the
+   * PROJECT's current session (`scanConfig.authStatePath` — kept fresh by
+   * a "Refresh session" action or a manual re-capture) over the specific
+   * discovery run's own frozen-at-crawl-time path: a run's own path is
+   * whatever was captured back when THAT crawl happened, with no way to
+   * update it short of re-running discovery — if that session has since
+   * expired, every future replay against flows from that run would
+   * otherwise fail forever for a reason that has nothing to do with the
+   * flow itself. Falls back to the run's own path when the project has
+   * none (e.g. an older project that never adopted a project-level
+   * session). Advisory, not fatal throughout: any lookup failure just
+   * falls through to the next option, down to no auth state at all.
+   */
+  resolveFlowAuthStatePath(
+    runId: string,
+    ownerId?: string,
+  ): string | undefined {
+    let run;
+    try {
+      run = this.run(runId, ownerId);
+    } catch {
+      return undefined;
+    }
+    try {
+      if (!run.projectId) throw new Error("Run has no projectId");
+      const projectPath = this.project(run.projectId, ownerId).scanConfig
+        .authStatePath;
+      if (projectPath && existsSync(projectPath)) return projectPath;
+    } catch {
+      // Fall through to the run's own path below.
+    }
+    const path = run.config.authStatePath;
+    return path && existsSync(path) ? path : undefined;
+  }
+  /**
+   * Replaces a project's encrypted login-recipe secrets (keyed by the
+   * owning `WorkflowStep`'s own index in `scanConfig.setupSteps` — same
+   * indexing `executeStep`'s `secrets` param already uses,
+   * packages/worker/src/workflow-runner.ts). Called once, when the user
+   * saves the recipe (apps/server/src/index.ts's PUT .../login-recipe),
+   * explicitly opting into persistence — never auto-captured; see
+   * apps/server/src/auth-capture.ts's recorder, which deliberately never
+   * lets a password's real value reach the server at all otherwise. An
+   * empty map clears any previously stored secrets for the project rather
+   * than leaving stale ones behind after a recipe edit removes a secret
+   * step.
+   */
+  saveProjectAuthSecrets(
+    projectId: string,
+    secrets: Record<string, string>,
+  ): void {
+    if (Object.keys(secrets).length === 0) {
+      this.db
+        .prepare("DELETE FROM project_auth_secrets WHERE project_id=?")
+        .run(projectId);
+      return;
+    }
+    const ciphertext = sealSecret(secrets);
+    this.db
+      .prepare(
+        "INSERT INTO project_auth_secrets(project_id,ciphertext) VALUES (?,?) ON CONFLICT(project_id) DO UPDATE SET ciphertext=excluded.ciphertext",
+      )
+      .run(projectId, ciphertext);
+  }
+  /**
+   * The decrypted secrets map for a project's login recipe — server-
+   * internal use only (packages/mcp/src/app-server.ts's "Authenticate"
+   * tool). Never call this from a route that returns its result to a
+   * client; nothing else in this codebase should ever see a real secret
+   * value come back from the server once saved.
+   */
+  projectAuthSecrets(projectId: string): Record<string, string> {
+    const row = this.db
+      .prepare("SELECT ciphertext FROM project_auth_secrets WHERE project_id=?")
+      .get(projectId) as { ciphertext: string } | undefined;
+    if (!row) return {};
+    try {
+      return unsealSecret<Record<string, string>>(row.ciphertext);
+    } catch {
+      return {};
+    }
+  }
   archiveProject(id: string, ownerId?: string): Project {
     const project = this.project(id, ownerId);
     const next = ProjectSchema.parse({
@@ -346,7 +546,7 @@ export class Store {
       `Project scope: ${project.description || project.name}. Application origin: ${new URL(project.baseUrl).origin}.`,
       project.agentInstructions,
       `This project contains ${discoveries.length} discoveries, ${stats.states} observed states, ${stats.components} component observations, and ${stats.actions} executed interactions.`,
-      "Use search_api_calls to find observed endpoints and get_api_flow to trace calls caused by a route or interaction. Dedicated observed_flow_* tools expose individual captured flows. After a new discovery finishes, call refresh_flow_tools to register its dedicated flow tools. These flow tools return evidence and do not execute API calls. If evidence is missing or stale, use start_discovery, then poll list_discoveries until that discovery finishes before drawing conclusions.",
+      "Use search_api_calls to find observed endpoints, then get_api_flow (with that call's taskId) to read the full captured request sequence behind one interaction, route, or probe task — omit taskId to list every flow in a discovery instead. These tools return evidence and do not execute API calls. If evidence is missing or stale, use start_discovery, then poll list_discoveries until that discovery finishes before drawing conclusions.",
       "Use only this project’s MCP resources and tools. Cite discovery IDs and state or component IDs for claims. Distinguish observed facts from guesses. Say when project evidence is missing. Never claim knowledge from another project.",
     ].join("\n\n");
     return {
@@ -367,7 +567,6 @@ export class Store {
           "get_interaction",
           "search_api_calls",
           "get_api_flow",
-          "refresh_flow_tools",
           "start_discovery",
           "compare_discoveries",
         ],

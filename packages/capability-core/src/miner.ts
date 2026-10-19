@@ -8,7 +8,15 @@ import {
 } from "./correlation.js";
 import { classifyUIOutcome } from "./ui-correlation.js";
 
-const slug = (value: string) =>
+// Exported for packages/mcp/src/mining-tools.ts's propose_capability, which
+// needs the exact same safe-identifier guarantee for an LLM-supplied
+// inputField that this module already gives every deterministically-mined
+// one — a raw human-readable label (e.g. "patient name or ID") is a valid
+// FlowStep.inputField string and JSON Schema property key, but breaks the
+// generated sample code's `input.${inputField}` dot-notation reference
+// (apps/dashboard/src/flow-capabilities-views.tsx), which assumes a plain
+// identifier the way every other inputField here already is.
+export const slug = (value: string) =>
   value
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "_")

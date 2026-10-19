@@ -22,9 +22,52 @@ import {
   artifactRoot,
   type Store,
 } from "../../../packages/storage/src/index.js";
-import type { AuthCapture } from "../../../packages/shared/src/index.js";
+import type {
+  AuthCapture,
+  WorkflowStep,
+} from "../../../packages/shared/src/index.js";
 
 export class AuthCaptureConflictError extends Error {}
+
+/** One raw event the in-page recorder reported, before it's turned into a `WorkflowStep` at capture-finish time. */
+export interface RecordedEvent {
+  kind: "click" | "fill";
+  selector: string;
+  value?: string;
+  secret?: boolean;
+}
+
+/**
+ * Turns the raw events `RECORDER_SCRIPT` reported into the project's
+ * replayable login recipe — exported (pure, no browser/Store dependency) so
+ * it's unit-testable on its own and reusable anywhere else a recorded
+ * session needs converting, not just `captureAuthState`'s one call site.
+ * Always prepends a synthetic navigate: `runSetupSteps` starts from a
+ * totally blank page (packages/core/src/index.ts's Coordinator.start()
+ * never calls page.goto() before its own setup steps run), so without this
+ * the recorded clicks/fills alike would have no page to act on when
+ * replayed standalone, even though the LIVE capture session they were
+ * recorded from had its own .goto(baseUrl) already (outside the recorder).
+ */
+export function buildLoginSteps(
+  baseUrl: string,
+  recorded: RecordedEvent[],
+): WorkflowStep[] {
+  return [
+    { type: "navigate", url: baseUrl },
+    ...recorded.map(
+      (event): WorkflowStep =>
+        event.kind === "click"
+          ? { type: "click", selector: event.selector }
+          : {
+              type: "fill",
+              selector: event.selector,
+              value: event.secret ? "" : (event.value ?? ""),
+              secret: event.secret,
+            },
+    ),
+  ];
+}
 
 interface AuthCaptureHandle {
   id: string;
@@ -32,7 +75,76 @@ interface AuthCaptureHandle {
   ownerId: string;
   browser: Browser;
   page: Page;
+  // A later fill on the SAME selector (the user editing/retyping a field
+  // before submitting) replaces, rather than piles onto, its earlier entry —
+  // keyed by selector so order is still whatever `Map` insertion order gives
+  // (first-touched position), with clicks interleaved by giving each one its
+  // own unique key.
+  recorded: Map<string, RecordedEvent>;
 }
+
+// Injected via page.addInitScript — Playwright re-runs this on every new
+// document (including the login page itself, if reaching it navigates away
+// from `baseUrl`), so the listeners survive the exact kind of full-page
+// navigation a login flow usually involves. Deliberately minimal and
+// self-contained (no dependency on packages/worker/src/observe.ts's
+// locator-candidate machinery, which lives inside a much larger in-page
+// closure not built for standalone reuse): a single data-testid/id/
+// structural-path CSS selector is all `executeStep`'s `page.locator(selector)`
+// needs, unlike discovery's own multi-candidate scoring.
+export const RECORDER_SCRIPT = `(() => {
+  if (window.__unfoldRecorderInstalled) return;
+  window.__unfoldRecorderInstalled = true;
+  const cssPath = (el) => {
+    if (!el || el.nodeType !== 1) return "";
+    if (el.getAttribute("data-testid"))
+      return '[data-testid="' + CSS.escape(el.getAttribute("data-testid")) + '"]';
+    if (el.id && !/[0-9]{4,}|[a-f0-9]{8,}|:r/.test(el.id))
+      return "#" + CSS.escape(el.id);
+    let p = el.tagName.toLowerCase();
+    const siblings = el.parentElement
+      ? Array.from(el.parentElement.children).filter((s) => s.tagName === el.tagName)
+      : [];
+    if (siblings.length > 1) p += ":nth-of-type(" + (siblings.indexOf(el) + 1) + ")";
+    if (el.parentElement && el.parentElement.tagName !== "BODY")
+      return cssPath(el.parentElement) + " > " + p;
+    return p;
+  };
+  document.addEventListener("click", (e) => {
+    const target = e.target;
+    if (!target || target.nodeType !== 1) return;
+    const tag = target.tagName;
+    // Focusing a text field by clicking into it isn't a meaningful step on
+    // its own — the field's own "fill" event (below) already records the
+    // action that matters. A checkbox/radio DOES need its click recorded,
+    // since toggling one has no separate "fill" equivalent.
+    if (
+      (tag === "INPUT" &&
+        !["checkbox", "radio"].includes(target.type || "")) ||
+      tag === "TEXTAREA" ||
+      tag === "SELECT"
+    )
+      return;
+    const el = target.closest("button, a, [role=button], summary") || target;
+    window.__unfoldRecordStep?.({ kind: "click", selector: cssPath(el) });
+  }, true);
+  document.addEventListener("change", (e) => {
+    const el = e.target;
+    if (!el || el.nodeType !== 1) return;
+    if (el.tagName === "INPUT" && ["checkbox", "radio"].includes(el.type || "")) {
+      window.__unfoldRecordStep?.({ kind: "click", selector: cssPath(el) });
+      return;
+    }
+    if (el.tagName !== "INPUT" && el.tagName !== "TEXTAREA") return;
+    const isPassword = el.type === "password";
+    window.__unfoldRecordStep?.({
+      kind: "fill",
+      selector: cssPath(el),
+      value: isPassword ? "" : el.value,
+      secret: isPassword,
+    });
+  }, true);
+})();`;
 
 // In-memory liveness map, mirroring browse-session.ts's `live` pattern — the
 // live Browser/Page handle can't be persisted across a process restart; the
@@ -60,11 +172,13 @@ export async function openAuthCapture(
     ownerId,
     baseUrl,
     status: "open",
+    loginSteps: [],
     createdAt: new Date().toISOString(),
   });
 
   let browser: Browser;
   let page: Page;
+  const recorded = new Map<string, RecordedEvent>();
   try {
     browser = await chromium.launch({
       headless: false,
@@ -73,6 +187,20 @@ export async function openAuthCapture(
     // A fresh, isolated context — never the user's real browser profile.
     const context = await browser.newContext();
     page = await context.newPage();
+    let clickSeq = 0;
+    await page.exposeFunction("__unfoldRecordStep", (event: RecordedEvent) => {
+      if (!event.selector) return;
+      // Clicks get a unique key each (there's no "the same click" to
+      // replace), fills key on their selector so a later edit to the same
+      // field replaces its earlier recording instead of piling up.
+      recorded.set(
+        event.kind === "click"
+          ? `click:${clickSeq++}`
+          : `fill:${event.selector}`,
+        event,
+      );
+    });
+    await page.addInitScript(RECORDER_SCRIPT);
     await page.goto(baseUrl, { waitUntil: "domcontentloaded", timeout: 20000 });
   } catch (error) {
     return store.updateAuthCapture(
@@ -88,7 +216,7 @@ export async function openAuthCapture(
     );
   }
 
-  live.set(id, { id, projectId, ownerId, browser, page });
+  live.set(id, { id, projectId, ownerId, browser, page, recorded });
   page.once("close", () => {
     live.delete(id);
   });
@@ -127,6 +255,10 @@ export async function captureAuthState(
       // Ignore an unparseable origin rather than failing the whole capture.
     }
 
+  const loginSteps = buildLoginSteps(capture.baseUrl, [
+    ...handle.recorded.values(),
+  ]);
+
   live.delete(id);
   await handle.browser.close().catch(() => {});
 
@@ -138,6 +270,7 @@ export async function captureAuthState(
       cookieCount: state.cookies.length,
       domains: [...domains].sort(),
       capturedAt: new Date().toISOString(),
+      loginSteps,
     },
     ownerId,
   );

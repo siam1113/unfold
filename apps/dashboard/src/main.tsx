@@ -119,9 +119,14 @@ import "reactflow/dist/style.css";
 import "./styles.css";
 import { downloadFlowSvg } from "./flow-image-export";
 import { AuthBackdrop } from "./auth-backdrop";
-import { AuthCaptureWizard, AuthCaptureList } from "./flow-auth-capture-views";
+import {
+  AuthCaptureWizard,
+  AuthCaptureList,
+  AuthSessionPanel,
+} from "./flow-auth-capture-views";
 import { SetupStepsEditor } from "./flow-setup-steps";
 import { AppMcp } from "./flow-appmcp-views";
+import { ToolCatalog, type ToolCatalogEntry } from "./tool-catalog";
 import { useFullscreenToggle } from "./use-fullscreen";
 const ComponentReuseMap = React.lazy(() =>
   import("./flow-structure-views").then((module) => ({
@@ -807,6 +812,51 @@ function CopyButton({ value }: { value: string }) {
     </button>
   );
 }
+/** Fetches and renders one project's tool catalog for the MCP setup modal — shared by the WebMCP and Regular MCP tabs (AppMcp fetches its own, since it also owns the headed/headless toggle and client-config snippet above its tool list). */
+function ProjectToolCatalog({
+  projectId,
+  path,
+  outputHint,
+  emptyLabel,
+}: {
+  projectId: string;
+  path: string;
+  outputHint: string;
+  emptyLabel?: string;
+}) {
+  const [tools, setTools] = useState<ToolCatalogEntry[]>();
+  const [error, setError] = useState("");
+  useEffect(() => {
+    if (!projectId) return;
+    setTools(undefined);
+    setError("");
+    api<ToolCatalogEntry[]>(`/projects/${projectId}${path}`, undefined, "GET")
+      .then(setTools)
+      .catch((e) =>
+        setError(e instanceof Error ? e.message : "Request failed"),
+      );
+  }, [projectId, path]);
+  if (error)
+    return (
+      <p className="mcp-setup-error" role="alert">
+        <AlertCircle size={14} /> {error}
+      </p>
+    );
+  if (!tools)
+    return (
+      <div className="loading">
+        <ScanLine />
+        Loading tools…
+      </div>
+    );
+  return (
+    <ToolCatalog
+      tools={tools}
+      outputHint={outputHint}
+      emptyLabel={emptyLabel}
+    />
+  );
+}
 function McpSetup({
   projects,
   initialProjectId,
@@ -847,12 +897,13 @@ function McpSetup({
       setDownloading(false);
     }
   };
+  const activeProjects = projects.filter((item) => !item.archivedAt);
   const [projectId, setProjectId] = useState(
-    initialProjectId ||
-      projects.find((project) => !project.archivedAt)?.id ||
-      "",
+    initialProjectId || activeProjects[0]?.id || "",
   );
-  const [client, setClient] = useState<"codex" | "claude" | "copilot">("codex");
+  const [client, setClient] = useState<
+    "codex" | "claude" | "copilot" | "vscode"
+  >("codex");
   const serverUrl = window.location.origin;
   const project = projects.find((item) => item.id === projectId);
   const endpoint = project
@@ -877,14 +928,28 @@ function McpSetup({
       null,
       2,
     ),
-    mcpjson: JSON.stringify(
+    // VS Code's native MCP support (.vscode/mcp.json) uses a DIFFERENT
+    // top-level key (`servers`, not `mcpServers`) and its own `${input:...}`
+    // secret-prompting mechanism rather than a hardcoded token — since this
+    // file is often committed to a repo, hardcoding a real bearer token the
+    // way the other clients' snippets do would be a credential leak
+    // waiting to happen.
+    vscode: JSON.stringify(
       {
-        mcpServers: {
+        inputs: [
+          {
+            id: "unfold-token",
+            type: "promptString",
+            description: "Unfold personal access token",
+            password: true,
+          },
+        ],
+        servers: {
           [name]: {
             type: "http",
             url: endpoint,
             headers: {
-              Authorization: "Bearer YOUR_UNFOLD_ACCESS_TOKEN",
+              Authorization: "Bearer ${input:unfold-token}",
             },
           },
         },
@@ -900,6 +965,8 @@ function McpSetup({
       "Run this command from your project. Claude Code stores the server for this project; add --scope user after mcp add if you want it available everywhere.",
     copilot:
       "Save this portable config as ~/.copilot/mcp-config.json (or under $COPILOT_HOME/mcp-config.json). Start a new Copilot session to load the Unfold tools.",
+    vscode:
+      "Save this as .vscode/mcp.json. VS Code will prompt you for the token (via the inputs block above) the first time it connects, rather than storing it in the file — safe even if this file ends up committed to the repo.",
   };
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -908,6 +975,21 @@ function McpSetup({
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [close]);
+  const projectPicker = (
+    <label className="mcp-setup-project">
+      <span>Project</span>
+      <select
+        value={projectId}
+        onChange={(event) => setProjectId(event.target.value)}
+      >
+        {activeProjects.map((item) => (
+          <option value={item.id} key={item.id}>
+            {item.name}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
   return (
     <div
       className="mcp-setup-backdrop"
@@ -987,88 +1069,90 @@ function McpSetup({
           </button>
         </div>
         {method === "webmcp" ? (
-          <div className="mcp-setup-extension">
-            <ol className="mcp-setup-steps">
-              <li>
-                <span>Create a personal access token</span>
-                <p>
-                  Tokens are the credential the extension authenticates with.
-                </p>
-                <button
-                  type="button"
-                  className="button"
-                  onClick={openExtensionSettings}
-                >
-                  Open Settings → Extensions
-                </button>
-              </li>
-              <li>
-                <span>Download the extension</span>
-                <p>
-                  Unzip it, then in Chrome open chrome://extensions, turn on
-                  Developer mode, and “Load unpacked” the unzipped folder. Open
-                  the extension’s options page from there.
-                </p>
-                <button
-                  type="button"
-                  className="button"
-                  onClick={downloadExtension}
-                  disabled={downloading}
-                >
-                  <Download size={14} />
-                  {downloading ? "Downloading…" : "Download extension"}
-                </button>
-                {downloadError && (
-                  <p className="mcp-setup-error" role="alert">
-                    {downloadError}
-                  </p>
-                )}
-              </li>
-              <li>
-                <span>Connect it to this server</span>
-                <div className="mcp-setup-endpoint">
-                  <span>Server URL</span>
-                  <code>{serverUrl}</code>
-                  <CopyButton value={serverUrl} />
-                </div>
-                <p>
-                  Paste this URL and your token into the extension’s “Connect to
-                  your Unfold server” form, then click Connect.
-                </p>
-              </li>
-              <li>
-                <span>Allow sites</span>
-                <p>
-                  In the extension options, grant the origins where you want
-                  Unfold’s WebMCP tools to register.
-                </p>
-              </li>
-            </ol>
-            <div className="mcp-setup-auth">
-              <ShieldCheck size={16} />
-              <p>
-                The extension authenticates as you. Revoke its token from
-                Settings → Extensions any time to disconnect it.
-              </p>
-            </div>
-          </div>
-        ) : projects.filter((item) => !item.archivedAt).length ? (
           <>
-            <label className="mcp-setup-project">
-              <span>Project</span>
-              <select
-                value={projectId}
-                onChange={(event) => setProjectId(event.target.value)}
-              >
-                {projects
-                  .filter((item) => !item.archivedAt)
-                  .map((item) => (
-                    <option value={item.id} key={item.id}>
-                      {item.name}
-                    </option>
-                  ))}
-              </select>
-            </label>
+            <div className="mcp-setup-extension">
+              <ol className="mcp-setup-steps">
+                <li>
+                  <span>Create a personal access token</span>
+                  <p>
+                    Tokens are the credential the extension authenticates with.
+                  </p>
+                  <button
+                    type="button"
+                    className="button"
+                    onClick={openExtensionSettings}
+                  >
+                    Open Settings → Extensions
+                  </button>
+                </li>
+                <li>
+                  <span>Download the extension</span>
+                  <p>
+                    Unzip it, then in Chrome open chrome://extensions, turn on
+                    Developer mode, and “Load unpacked” the unzipped folder.
+                    Open the extension’s options page from there.
+                  </p>
+                  <button
+                    type="button"
+                    className="button"
+                    onClick={downloadExtension}
+                    disabled={downloading}
+                  >
+                    <Download size={14} />
+                    {downloading ? "Downloading…" : "Download extension"}
+                  </button>
+                  {downloadError && (
+                    <p className="mcp-setup-error" role="alert">
+                      {downloadError}
+                    </p>
+                  )}
+                </li>
+                <li>
+                  <span>Connect it to this server</span>
+                  <div className="mcp-setup-endpoint">
+                    <span>Server URL</span>
+                    <code>{serverUrl}</code>
+                    <CopyButton value={serverUrl} />
+                  </div>
+                  <p>
+                    Paste this URL and your token into the extension’s “Connect
+                    to your Unfold server” form, then click Connect.
+                  </p>
+                </li>
+                <li>
+                  <span>Allow sites</span>
+                  <p>
+                    In the extension options, grant the origins where you want
+                    Unfold’s WebMCP tools to register.
+                  </p>
+                </li>
+              </ol>
+              <div className="mcp-setup-auth">
+                <ShieldCheck size={16} />
+                <p>
+                  The extension authenticates as you. Revoke its token from
+                  Settings → Extensions any time to disconnect it.
+                </p>
+              </div>
+            </div>
+            {activeProjects.length > 0 && (
+              <>
+                {projectPicker}
+                <label className="field-label">
+                  Tools registered on this project
+                </label>
+                <ProjectToolCatalog
+                  projectId={projectId}
+                  path="/browse/webmcp-tools"
+                  outputHint="Result of the capability's browser replay, returned to the extension's calling page."
+                  emptyLabel="No published capabilities yet — publish one from the Capabilities tab to expose it here."
+                />
+              </>
+            )}
+          </>
+        ) : activeProjects.length ? (
+          <>
+            {projectPicker}
             {method === "appmcp" ? (
               <AppMcp projectId={projectId} />
             ) : (
@@ -1092,21 +1176,25 @@ function McpSetup({
                   role="tablist"
                   aria-label="Agent client"
                 >
-                  {(["codex", "claude", "copilot"] as const).map((id) => (
-                    <button
-                      key={id}
-                      role="tab"
-                      aria-selected={client === id}
-                      className={client === id ? "active" : ""}
-                      onClick={() => setClient(id)}
-                    >
-                      {id === "codex"
-                        ? "Codex"
-                        : id === "claude"
-                          ? "Claude Code"
-                          : "Copilot"}
-                    </button>
-                  ))}
+                  {(["codex", "claude", "copilot", "vscode"] as const).map(
+                    (id) => (
+                      <button
+                        key={id}
+                        role="tab"
+                        aria-selected={client === id}
+                        className={client === id ? "active" : ""}
+                        onClick={() => setClient(id)}
+                      >
+                        {id === "codex"
+                          ? "Codex"
+                          : id === "claude"
+                            ? "Claude Code"
+                            : id === "copilot"
+                              ? "Copilot"
+                              : "VS Code"}
+                      </button>
+                    ),
+                  )}
                 </div>
                 <p className="mcp-setup-instructions">{instructions[client]}</p>
                 <pre className="mcp-setup-code">
@@ -1121,6 +1209,12 @@ function McpSetup({
                     connecting. Ask your workspace admin if you need a token.
                   </p>
                 </div>
+                <label className="field-label">Tools</label>
+                <ProjectToolCatalog
+                  projectId={projectId}
+                  path="/mcp-tools"
+                  outputHint="Structured JSON evidence, returned as the tool call's text content."
+                />
               </>
             )}
           </>
@@ -2647,6 +2741,7 @@ function ProjectWorkspace({
   const [data, setData] = useState<ProjectData>();
   const [error, setError] = useState("");
   const [newDiscovery, setNewDiscovery] = useState(false);
+  const [showAuthCapture, setShowAuthCapture] = useState(false);
   const [discoveryViewMode, setDiscoveryViewMode] = useState<
     "gallery" | "list"
   >("gallery");
@@ -3347,6 +3442,12 @@ function ProjectWorkspace({
           </button>
         </div>
       </div>
+      <AuthSessionPanel
+        projectId={p.id}
+        scanConfig={p.scanConfig}
+        onReauthenticate={() => setShowAuthCapture(true)}
+        onRefreshed={load}
+      />
       <>
         <div className="section-bar project-discoveries-bar">
           <h2>
@@ -3416,6 +3517,24 @@ function ProjectWorkspace({
               await refresh();
               load();
               navigate(`/projects/${p.id}/discoveries/${r.id}/graph`);
+            }}
+          />,
+          document.body,
+        )}
+      {showAuthCapture &&
+        createPortal(
+          <AuthCaptureWizard
+            projectId={p.id}
+            projectUrl={p.baseUrl}
+            onClose={() => setShowAuthCapture(false)}
+            onCaptured={async (captured) => {
+              setShowAuthCapture(false);
+              if (captured.path)
+                await api(
+                  `/projects/${p.id}/auth-captures/${captured.id}/use`,
+                  {},
+                ).catch(() => {});
+              load();
             }}
           />,
           document.body,

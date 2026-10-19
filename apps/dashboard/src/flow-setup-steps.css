@@ -79,6 +79,17 @@
 .setup-step-form label > span {
   font-size: 10px;
 }
+.setup-step-secret-toggle {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center;
+  gap: 7px;
+}
+.setup-step-secret-toggle input[type="checkbox"] {
+  display: inline-block !important;
+  width: auto !important;
+  margin: 0 !important;
+}
 .setup-step-form input,
 .setup-step-form select {
   display: block;

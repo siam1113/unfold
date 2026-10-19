@@ -1,6 +1,69 @@
 .auth-capture-modal {
   max-width: 460px;
 }
+.auth-capture-recipe {
+  margin-top: 4px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.auth-session-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 16px 0;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.auth-session-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  color: var(--muted);
+}
+.auth-session-status strong {
+  display: block;
+  font-size: 13px;
+  color: var(--ink, #25364d);
+}
+.auth-session-status p {
+  margin: 3px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.auth-session-notice {
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: color-mix(in srgb, #1f8a5a 10%, var(--surface));
+  color: #1f8a5a;
+  font-size: 12px;
+}
+.auth-session-secrets {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.auth-session-secrets label {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+}
+.auth-session-secrets input {
+  display: block;
+  width: 100%;
+  border: 1px solid #dbe5f2;
+  background: #fcfdff;
+  border-radius: 7px;
+  padding: 9px 10px;
+  margin-top: 6px;
+  color: #25364d;
+  font-size: 12px;
+}
+.auth-session-actions {
+  display: flex;
+  gap: 8px;
+}
 .auth-capture-summary {
   display: flex;
   align-items: flex-start;

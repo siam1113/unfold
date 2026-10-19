@@ -83,24 +83,61 @@ export async function verify(
     }),
   );
 }
+/**
+ * `timeoutMs` (default 0 — preserves the original instant-check behavior
+ * for every existing caller that doesn't pass it) polls the candidates
+ * every ~200ms until one resolves or the deadline passes, instead of
+ * giving up after a single check. That single check was the real bug
+ * behind a `LOCATOR_UNREACHABLE` fired the instant a page's `load` event
+ * fires but before a client-rendered SPA has actually mounted its content —
+ * `page.setDefaultTimeout()` (what a verification run's `actionTimeoutMs`
+ * sets, packages/verification/src/runner.ts) only extends Playwright's own
+ * built-in auto-wait for actions like `.click()`/`.fill()`, which this
+ * function never calls — `.count()`/`.isVisible()`/`.isEnabled()` are
+ * immediate, non-waiting Locator queries no timeout setting affects. A
+ * caller that wants its configured action timeout to actually cover "wait
+ * for the target to exist" has to pass it here explicitly (see
+ * packages/capability-runtime/src/replay.ts).
+ */
 export async function resolveTarget(
   page: Page,
   candidates: LocatorCandidate[],
+  timeoutMs = 0,
 ): Promise<Locator> {
-  for (const c of [...candidates].sort((a, b) => b.score - a.score)) {
-    const l = locator(page, c);
-    try {
-      if (
-        (await l.count()) === 1 &&
-        (await l.isVisible()) &&
-        (await l.isEnabled())
-      )
-        return l;
-    } catch {
-      /* try next candidate */
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    for (const c of [...candidates].sort((a, b) => b.score - a.score)) {
+      const l = locator(page, c);
+      try {
+        if (
+          (await l.count()) === 1 &&
+          (await l.isVisible()) &&
+          (await l.isEnabled())
+        )
+          return l;
+      } catch {
+        /* try next candidate */
+      }
     }
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) break;
+    await page.waitForTimeout(Math.min(200, remaining));
   }
   throw new Error("LOCATOR_UNREACHABLE: no unique visible enabled candidate");
+}
+// A fill or click resolves its own Playwright promise the instant the DOM
+// event dispatches, but the page's own JS reacting to that event — a
+// controlled-input re-render, a debounced validator that enables the submit
+// button, a password manager writing back into the field — runs on a later
+// tick. Starting the next step's actionability check immediately can race
+// that settle, which is how a fast scripted run (e.g. the Auth tool) ends up
+// clicking "submit" before the password field has actually registered its
+// value. apps/extension/src/replay.ts's in-page replay engine already waits
+// this long after every step for the same reason; this mirrors it for the
+// Playwright-driven engines (capability replay, workflow/auth steps).
+export const ACTION_SETTLE_MS = 150;
+export async function settleAfterAction(page: Page) {
+  await page.waitForTimeout(ACTION_SETTLE_MS).catch(() => {});
 }
 /**
  * Performs one interaction against an already-resolved locator using an
@@ -119,6 +156,7 @@ export async function performAction(
     else await target.fill(value);
   } else if (action === "hover") await target.hover();
   else await target.click();
+  await settleAfterAction(target.page());
 }
 // Node-side network-idle tracking, keyed by Page so concurrent crawls (each
 // with their own page/context) never cross-count. Additive: Playwright lets

@@ -434,7 +434,10 @@ export function VerificationWizard({
                 <div className="verify-wizard-timeout-row">
                   <span className="verify-wizard-timeout-label">
                     Action
-                    <small>Waiting for a click, fill, or select.</small>
+                    <small>
+                      Waiting for a step's target to appear, then for the
+                      click/fill/select itself.
+                    </small>
                   </span>
                   <div className="verify-wizard-timeout-field">
                     <input

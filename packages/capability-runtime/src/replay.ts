@@ -79,6 +79,15 @@ export async function replayCapability(
     action: Flow["steps"][number]["action"];
     requiresUrl?: string;
   }) => void,
+  // How long `resolveTarget` polls for a step's target to actually become
+  // resolvable before giving up (LOCATOR_UNREACHABLE) — covers a client-
+  // rendered SPA that's still mounting content after `page.goto()`'s `load`
+  // event already fired. Exposed so a verification run's configured
+  // `actionTimeoutMs` (packages/verification/src/runner.ts) genuinely
+  // extends this wait, not just Playwright's own built-in auto-wait for
+  // the action itself (which `resolveTarget` never goes through — see its
+  // own doc comment, packages/worker/src/observe.ts).
+  targetTimeoutMs = 5_000,
 ): Promise<ReplayResult> {
   if (page.url() !== flow.startUrl) await page.goto(flow.startUrl);
 
@@ -99,7 +108,7 @@ export async function replayCapability(
     locators: Flow["steps"][number]["locators"],
   ) => {
     try {
-      return await resolveTarget(page, locators);
+      return await resolveTarget(page, locators, targetTimeoutMs);
     } catch (error) {
       // `?? []` guards a capability object reaching here without this field
       // at all (e.g. one read from a stale compiled server process, from
@@ -127,7 +136,7 @@ export async function replayCapability(
         }
       }
       try {
-        return await resolveTarget(page, locators);
+        return await resolveTarget(page, locators, targetTimeoutMs);
       } catch {
         const original = error instanceof Error ? error.message : String(error);
         throw new Error(
@@ -173,7 +182,7 @@ export async function replayCapability(
     const target =
       i === 0
         ? await resolveFirstStepTarget(step.locators)
-        : await resolveTarget(page, step.locators);
+        : await resolveTarget(page, step.locators, targetTimeoutMs);
     const value = step.inputField
       ? String(input[step.inputField] ?? "")
       : undefined;
@@ -213,7 +222,7 @@ export async function replayCapability(
   const finalTarget =
     flow.steps.length === 1
       ? await resolveFirstStepTarget(finalStep.locators)
-      : await resolveTarget(page, finalStep.locators);
+      : await resolveTarget(page, finalStep.locators, targetTimeoutMs);
   const finalValue = finalStep.inputField
     ? String(input[finalStep.inputField] ?? "")
     : undefined;
